@@ -38,6 +38,7 @@
         "build": "tsc",
         "test": "node --test --experimental-strip-types src/**/*.test.ts",
         "test:models": "node --experimental-strip-types scripts/test-models.ts",
+        "lane:check": "node --experimental-strip-types scripts/lane-check.ts",
         "validate:oauth": "node --experimental-strip-types scripts/validate-oauth-refresh.ts",
         "lint": "oxlint && oxfmt --check .",
         "lint:fix": "oxlint --fix . && oxfmt --write .",
