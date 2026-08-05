@@ -32,17 +32,19 @@ const MODELS = [
     "claude-opus-4-6",
     "claude-opus-4-7",
     "claude-opus-4-8",
+    "claude-opus-5",
     "claude-sonnet-4-0",
     "claude-sonnet-4-20250514",
     "claude-sonnet-4-5",
     "claude-sonnet-4-5-20250929",
     "claude-sonnet-4-6",
+    "claude-sonnet-5",
 ]
 
 const API_URL = "https://api.anthropic.com/v1/messages"
 const SYSTEM_IDENTITY =
     "You are Claude Code, Anthropic's official CLI for Claude."
-const CLI_VERSION = process.env.ANTHROPIC_CLI_VERSION ?? "2.1.112"
+const CLI_VERSION = process.env.ANTHROPIC_CLI_VERSION ?? "2.1.222"
 
 const c = {
     green: (s: string) => `\x1b[32m${s}\x1b[0m`,

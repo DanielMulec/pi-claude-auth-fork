@@ -1,7 +1,6 @@
 import type {
     ExtensionAPI,
     ExtensionContext,
-    OAuthCredential,
     ProviderConfig,
 } from "@earendil-works/pi-coding-agent"
 import {
@@ -55,20 +54,42 @@ function toOAuthCreds(creds: ClaudeCredentials): OAuthCreds {
  * existing ANTHROPIC_API_KEY env var would shadow it). Setting the credential
  * directly on the live AuthStorage makes pi use the Claude Code OAuth token
  * immediately — and AuthStorage persists it to auth.json too.
+ *
+ * pi >= 0.83 removed `ModelRegistry.authStorage` (auth now lives in
+ * ModelRuntime, which extensions cannot write), so this is feature-detected:
+ * older pi keeps same-session injection, newer pi relies on the auth.json
+ * seeding done at extension init (picked up on the next pi start) or on
+ * `/login` (extension-provided `oauth.login`, works in-session).
  */
+interface LegacyAuthStorage {
+    set(provider: string, credential: OAuthCreds & { type: "oauth" }): void
+}
+
 function applyCredential(ctx: ExtensionContext): boolean {
     const creds = getCachedCredentials()
     if (!creds) return false
 
-    const credential: OAuthCredential = {
-        type: "oauth",
+    const credential = {
+        type: "oauth" as const,
         access: creds.accessToken,
         refresh: creds.refreshToken,
         expires: creds.expiresAt,
     }
 
+    const registry = ctx.modelRegistry as unknown as {
+        authStorage?: LegacyAuthStorage
+    }
+    if (!registry.authStorage) {
+        log("credential_injection_skipped", {
+            reason:
+                "ModelRegistry.authStorage removed in pi >= 0.83; auth.json " +
+                "seeding covers the next session, /login covers this one",
+        })
+        return false
+    }
+
     try {
-        ctx.modelRegistry.authStorage.set(PROVIDER_ID, credential)
+        registry.authStorage.set(PROVIDER_ID, credential)
         log("credential_applied", { provider: PROVIDER_ID })
         return true
     } catch (err) {
@@ -87,6 +108,8 @@ function applyCredential(ctx: ExtensionContext): boolean {
  * no separate login:
  *
  * - Injects the credentials into pi's live AuthStorage on every session start
+ *   (pi < 0.83; on pi ≥ 0.83 auth.json seeding covers the next session and
+ *   `/login` the current one)
  *   (and seeds auth.json) so they take priority over any ANTHROPIC_API_KEY.
  * - Overrides the `anthropic` provider's OAuth lifecycle: refresh goes through
  *   Anthropic's OAuth endpoint (with Claude CLI fallback) and rotated tokens

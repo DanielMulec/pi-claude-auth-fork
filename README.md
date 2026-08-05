@@ -1,5 +1,12 @@
 # pi-claude-auth
 
+> **Fork status (v0.2.0):** maintained fork of upstream `pi-claude-auth@0.1.3` (last upstream release 2026-06-04).
+> Changes vs upstream:
+>
+> - **Claude Code version pin bumped `2.1.160` → `2.1.222`** (billing header `cc_version` + user-agent must track the current Claude Code release)
+> - **pi ≥ 0.83 compatibility**: `ModelRegistry.authStorage` (removed in 0.83) is now feature-detected; auth.json seeding + `/login` cover the current session
+> - **New models added to the smoke-test list**: `claude-sonnet-5`, `claude-opus-5`
+
 Self-contained Anthropic auth for the [pi coding agent](https://pi.dev) using
 your existing Claude Code credentials — no separate login or API key needed.
 
@@ -132,11 +139,13 @@ or [@cortexkit/pi-anthropic-auth](https://pi.dev/packages/@cortexkit/pi-anthropi
 | claude-opus-4-6            |
 | claude-opus-4-7            |
 | claude-opus-4-8            |
+| claude-opus-5              |
 | claude-sonnet-4-0          |
 | claude-sonnet-4-20250514   |
 | claude-sonnet-4-5          |
 | claude-sonnet-4-5-20250929 |
 | claude-sonnet-4-6          |
+| claude-sonnet-5            |
 
 ## Credential sources
 
@@ -164,19 +173,20 @@ one account is found, the picker is skipped.
 
 ## Troubleshooting
 
-| Problem                            | Solution                                                                                                         |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| "No Claude Code credentials found" | Run `claude` to authenticate with Claude Code first                                                              |
-| "Keychain is locked"               | Run `security unlock-keychain ~/Library/Keychains/login.keychain-db`                                             |
-| "Token expired and refresh failed" | The extension runs the `claude` CLI to refresh automatically. If this fails, re-authenticate by running `claude` |
-| Not working on Linux/Windows       | Ensure `~/.claude/.credentials.json` exists. Run `claude` to create it                                           |
-| Keychain access denied             | Grant access when macOS prompts you                                                                              |
-| Keychain read timed out            | Restart Keychain Access (can happen on macOS Tahoe)                                                              |
-| Package not updating               | Run `pi update npm:@pankajudhas81/pi-claude-auth`                                                                |
+| Problem                            | Solution                                                                                                                                                                |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "No Claude Code credentials found" | Run `claude` to authenticate with Claude Code first                                                                                                                     |
+| Models missing right after install | On pi ≥ 0.83 the credential lands in `auth.json` for the **next** session: restart pi once, or run `/login` and pick `Claude Code (subscription)` to use it immediately |
+| "Keychain is locked"               | Run `security unlock-keychain ~/Library/Keychains/login.keychain-db`                                                                                                    |
+| "Token expired and refresh failed" | The extension runs the `claude` CLI to refresh automatically. If this fails, re-authenticate by running `claude`                                                        |
+| Not working on Linux/Windows       | Ensure `~/.claude/.credentials.json` exists. Run `claude` to create it                                                                                                  |
+| Keychain access denied             | Grant access when macOS prompts you                                                                                                                                     |
+| Keychain read timed out            | Restart Keychain Access (can happen on macOS Tahoe)                                                                                                                     |
+| Package not updating               | Run `pi update npm:@pankajudhas81/pi-claude-auth`                                                                                                                       |
 
 ### Claude Code version pinning
 
-The Claude Code version is pinned to `2.1.160` for billing header computation.
+The Claude Code version is pinned to `2.1.222` for billing header computation.
 If billing reverts to extra usage after a Claude Code update, override:
 
 ```bash
@@ -233,7 +243,7 @@ write-back is enabled by default to keep your stored credentials valid.
 | ----------------------- | ----------------------------------------------------------------------- | ------------- |
 | `PI_CODING_AGENT_DIR`   | pi's config directory (where `auth.json` lives)                         | `~/.pi/agent` |
 | `PI_CLAUDE_AUTH_DEBUG`  | Enable diagnostic logging (`1` for default path, or a custom file path) | disabled      |
-| `ANTHROPIC_CLI_VERSION` | Claude CLI version for billing headers                                  | `2.1.160`     |
+| `ANTHROPIC_CLI_VERSION` | Claude CLI version for billing headers                                  | `2.1.222`     |
 
 ## How it works
 
