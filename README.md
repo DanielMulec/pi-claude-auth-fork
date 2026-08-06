@@ -199,6 +199,9 @@ or update the package:
 pi update npm:@pankajudhas81/pi-claude-auth
 ```
 
+See [docs/LANE-MONITORING.md](docs/LANE-MONITORING.md) for the billing-lane
+check (`pnpm run lane:check`) and the re-check cadence.
+
 ### Diagnostic logging
 
 If you hit auth errors that are hard to reproduce, enable debug logging to
