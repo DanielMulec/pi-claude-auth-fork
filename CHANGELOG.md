@@ -1,5 +1,18 @@
 # Changelog
 
+# [0.3.0](https://github.com/pankajudhas81/pi-claude-auth/compare/v0.2.0...v0.3.0) (2026-08-17) — fork release
+
+### Changed
+
+- Live-captured Claude Code **2.1.234** request shape: Agent SDK identity
+  line, `cc_prompt_id`, `metadata.user_id` from `~/.claude.json`, session and
+  request-id headers, full `anthropic-beta` list, `?beta=true`.
+- `cch` is now structure-aware XXH64 on the final SDK JSON (not SHA-256 of
+  the user text). Seed is overridable via `ANTHROPIC_CCH_SEED` — the native
+  Bun seed still rotates per Claude Code release.
+- Stop relocating Pi's system prompt into the first user message.
+- Strip Pi 0.84+ official-API `fallbacks` on Claude Code OAuth (opus-5 400).
+
 # [0.2.0](https://github.com/pankajudhas81/pi-claude-auth/compare/v0.1.3...v0.2.0) (2026-08-06) — fork release
 
 ### Changed

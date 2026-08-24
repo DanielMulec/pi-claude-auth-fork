@@ -1,87 +1,86 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { injectBillingHeader } from "./transforms.ts"
-
-const IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude."
+import { AGENT_SDK_IDENTITY, LEGACY_CLI_IDENTITY } from "./signing.ts"
+import { injectBillingHeader, parseClaudeCodeIdentity } from "./transforms.ts"
 
 function claudePayload() {
     return {
         model: "claude-haiku-4-5",
-        system: [{ type: "text", text: IDENTITY }],
-        messages: [{ role: "user", content: "hello world" }],
+        system: [{ type: "text", text: LEGACY_CLI_IDENTITY }],
+        messages: [{ role: "user", content: "Reply with exactly: PROBE_OK" }],
     }
 }
 
-test("injectBillingHeader: prepends billing block when identity present", () => {
-    const payload = claudePayload()
-    const out = injectBillingHeader(payload)
-    assert.ok(out)
-    const system = out.system as Array<{ text: string }>
-    assert.equal(system.length, 2)
-    assert.match(system[0].text, /^x-anthropic-billing-header:/)
-    assert.equal(system[1].text, IDENTITY)
-})
-
-test("injectBillingHeader: undefined without the identity block", () => {
-    const payload = {
-        model: "claude-haiku-4-5",
-        system: [{ type: "text", text: "some other system prompt" }],
-        messages: [{ role: "user", content: "hi" }],
-    }
-    assert.equal(injectBillingHeader(payload), undefined)
-})
-
-test("injectBillingHeader: undefined for non-Claude models", () => {
-    const payload = {
-        model: "gpt-4o",
-        system: [{ type: "text", text: IDENTITY }],
-        messages: [{ role: "user", content: "hi" }],
-    }
-    assert.equal(injectBillingHeader(payload), undefined)
-})
-
-test("injectBillingHeader: idempotent when already injected", () => {
-    const payload = claudePayload()
-    const first = injectBillingHeader(payload)
-    assert.ok(first)
-    // Second pass over the already-injected payload is a no-op.
-    assert.equal(injectBillingHeader(first), undefined)
-})
-
-test("injectBillingHeader: undefined for non-object payloads", () => {
-    assert.equal(injectBillingHeader(null), undefined)
-    assert.equal(injectBillingHeader("string"), undefined)
-    assert.equal(injectBillingHeader(42), undefined)
-})
-
-test("injectBillingHeader: undefined when messages are missing", () => {
-    const payload = {
-        model: "claude-haiku-4-5",
-        system: [{ type: "text", text: IDENTITY }],
-    }
-    assert.equal(injectBillingHeader(payload), undefined)
-})
-
-test("injectBillingHeader: relocates non-core system entries to first user message", () => {
+test("injectBillingHeader: billing + Agent SDK identity, keeps extra system", () => {
     const payload = {
         model: "claude-sonnet-4-6",
         system: [
-            { type: "text", text: IDENTITY },
-            { type: "text", text: "You are a helpful coding agent." },
-            { type: "text", text: "Always respond in English." },
+            { type: "text", text: LEGACY_CLI_IDENTITY },
+            { type: "text", text: "Pi system", cache_control: { type: "ephemeral" } },
         ],
-        messages: [{ role: "user", content: "hello" }],
+        messages: [{ role: "user", content: "Reply with exactly: PROBE_OK" }],
     }
-    const out = injectBillingHeader(payload)
+    const out = injectBillingHeader(payload, "sess-1", {
+        deviceId: "f".repeat(64),
+        accountUuid: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+    })
     assert.ok(out)
-    const system = out.system as Array<{ text: string }>
-    // Only billing header + identity should remain in system[]
-    assert.equal(system.length, 2)
-    assert.match(system[0].text, /^x-anthropic-billing-header:/)
-    assert.equal(system[1].text, IDENTITY)
-    // Non-core entries should be prepended to first user message
-    const msgs = out.messages as Array<{ role: string; content: string }>
-    assert.ok(msgs[0].content.includes("You are a helpful coding agent."))
-    assert.ok(msgs[0].content.includes("Always respond in English."))
-    assert.ok(msgs[0].content.includes("hello"))
+    const system = out.system as Array<{ text: string; cache_control?: unknown }>
+    assert.equal(system.length, 3)
+    assert.match(
+        system[0].text,
+        /^x-anthropic-billing-header: cc_version=2\.1\.234\.1c7; cc_entrypoint=sdk-cli; cch=00000; cc_prompt_id=[0-9a-f-]{36};$/,
+    )
+    assert.equal(system[1].text, AGENT_SDK_IDENTITY)
+    assert.equal(system[2].text, "Pi system")
+    assert.deepEqual(system[2].cache_control, { type: "ephemeral" })
+    assert.deepEqual(out.metadata, {
+        user_id: JSON.stringify({
+            device_id: "f".repeat(64),
+            account_uuid: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+            session_id: "sess-1",
+        }),
+    })
+})
+
+test("injectBillingHeader: undefined without OAuth identity", () => {
+    assert.equal(
+        injectBillingHeader({
+            model: "claude-haiku-4-5",
+            system: [{ type: "text", text: "some other system prompt" }],
+            messages: [{ role: "user", content: "hi" }],
+        }),
+        undefined,
+    )
+})
+
+test("injectBillingHeader: undefined for non-Claude models", () => {
+    assert.equal(
+        injectBillingHeader({
+            model: "gpt-4o",
+            system: [{ type: "text", text: LEGACY_CLI_IDENTITY }],
+            messages: [{ role: "user", content: "hi" }],
+        }),
+        undefined,
+    )
+})
+
+test("injectBillingHeader: idempotent", () => {
+    const first = injectBillingHeader(claudePayload())
+    assert.ok(first)
+    const second = injectBillingHeader(first)
+    assert.ok(second)
+    const system = second.system as Array<{ text: string }>
+    assert.equal(system.filter((e) => e.text.startsWith("x-anthropic-billing-header")).length, 1)
+    assert.equal(system.filter((e) => e.text === AGENT_SDK_IDENTITY).length, 1)
+})
+
+test("parseClaudeCodeIdentity: rejects bad ids", () => {
+    assert.equal(
+        parseClaudeCodeIdentity({
+            userID: "bad",
+            oauthAccount: { accountUuid: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" },
+        }),
+        undefined,
+    )
 })

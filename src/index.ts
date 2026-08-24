@@ -17,8 +17,16 @@ import {
 } from "./credentials.ts"
 import { readAllClaudeAccounts, type ClaudeAccount } from "./keychain.ts"
 import { initLogger, log } from "./logger.ts"
-import { buildUserAgent } from "./signing.ts"
-import { injectBillingHeader } from "./transforms.ts"
+import {
+    buildUserAgent,
+    CLAUDE_CODE_BETAS,
+    installClaudeCodeFetchPatch,
+    setActiveSessionId,
+} from "./signing.ts"
+import {
+    discoverClaudeCodeIdentity,
+    injectBillingHeader,
+} from "./transforms.ts"
 
 export {
     getCachedCredentials,
@@ -124,6 +132,8 @@ function applyCredential(ctx: ExtensionContext): boolean {
  */
 const extension = async (pi: ExtensionAPI): Promise<void> => {
     initLogger()
+    installClaudeCodeFetchPatch()
+    const identity = discoverClaudeCodeIdentity()
 
     let accounts: ClaudeAccount[] = []
     try {
@@ -255,7 +265,11 @@ const extension = async (pi: ExtensionAPI): Promise<void> => {
     // of the subscription plan.
     pi.registerProvider(PROVIDER_ID, {
         oauth,
-        headers: { "user-agent": buildUserAgent() },
+        headers: {
+            "user-agent": buildUserAgent(),
+            "x-app": "cli",
+            "anthropic-beta": CLAUDE_CODE_BETAS,
+        },
     })
 
     // Inject the live credential into pi's AuthStorage on every session start.
@@ -263,6 +277,7 @@ const extension = async (pi: ExtensionAPI): Promise<void> => {
     // therefore enter Claude Code stealth mode) instead of falling back to an
     // ANTHROPIC_API_KEY env var or reporting "No API key found".
     pi.on("session_start", async (_event, ctx) => {
+        setActiveSessionId(ctx.sessionManager.getSessionId())
         applyCredential(ctx)
     })
 
@@ -270,9 +285,15 @@ const extension = async (pi: ExtensionAPI): Promise<void> => {
     // Claude Pro/Max subscription rather than pay-as-you-go API credits.
     // pi's built-in Anthropic provider supplies the identity, betas, and
     // user-agent for OAuth tokens but not this header.
-    pi.on("before_provider_request", (event) => {
+    pi.on("before_provider_request", (event, ctx) => {
         try {
-            const updated = injectBillingHeader(event.payload)
+            const sessionId = ctx.sessionManager.getSessionId()
+            setActiveSessionId(sessionId)
+            const updated = injectBillingHeader(
+                event.payload,
+                sessionId,
+                identity,
+            )
             if (updated) {
                 log("billing_header_injected", {})
                 return updated

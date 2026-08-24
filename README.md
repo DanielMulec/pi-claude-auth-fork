@@ -3,7 +3,7 @@
 > **Fork status (v0.2.0):** maintained fork of upstream `pi-claude-auth@0.1.3` (last upstream release 2026-06-04).
 > Changes vs upstream:
 >
-> - **Claude Code version pin bumped `2.1.160` → `2.1.222`** (billing header `cc_version` + user-agent must track the current Claude Code release)
+> - **Claude Code version pin bumped `2.1.222` → `2.1.234`** (live-captured 2026-08-17: Agent SDK identity, `cc_prompt_id`, fetch-time `cch`)
 > - **pi ≥ 0.83 compatibility**: `ModelRegistry.authStorage` (removed in 0.83) is now feature-detected; auth.json seeding + `/login` cover the current session
 > - **New models added to the smoke-test list**: `claude-sonnet-5`, `claude-opus-5`
 
@@ -186,7 +186,7 @@ one account is found, the picker is skipped.
 
 ### Claude Code version pinning
 
-The Claude Code version is pinned to `2.1.222` for billing header computation.
+The Claude Code version is pinned to `2.1.234` for billing header computation.
 If billing reverts to extra usage after a Claude Code update, override:
 
 ```bash
@@ -246,7 +246,8 @@ write-back is enabled by default to keep your stored credentials valid.
 | ----------------------- | ----------------------------------------------------------------------- | ------------- |
 | `PI_CODING_AGENT_DIR`   | pi's config directory (where `auth.json` lives)                         | `~/.pi/agent` |
 | `PI_CLAUDE_AUTH_DEBUG`  | Enable diagnostic logging (`1` for default path, or a custom file path) | disabled      |
-| `ANTHROPIC_CLI_VERSION` | Claude CLI version for billing headers                                  | `2.1.222`     |
+| `ANTHROPIC_CLI_VERSION` | Claude CLI version for billing headers                                  | `2.1.234`     |
+| `ANTHROPIC_CCH_SEED`    | 64-bit hex seed for structure-aware `cch` (native seed rotates)         | `4d659218e32a3268` |
 
 ## How it works
 
