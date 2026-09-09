@@ -9,18 +9,40 @@ const PRIME64_3 = 0x165667b19e3779f9n
 const PRIME64_4 = 0x85ebca77c2b2ae63n
 const PRIME64_5 = 0x27d4eb2f165667c5n
 
-// Live-captured Claude Code 2.1.234 (2026-08-17). Override via ANTHROPIC_CLI_VERSION.
-export const CC_VERSION = "2.1.234"
+// Live-captured Claude Code 2.1.266 (2026-09-09, build 2026-09-08T23:01:17Z,
+// git eb01d6090964). Override via ANTHROPIC_CLI_VERSION.
+export const CC_VERSION = "2.1.266"
 export const CC_ENTRYPOINT = "sdk-cli"
+
+// SDK/runtime identity Claude Code 2.1.266 reports in X-Stainless-* headers.
+// pi's own @anthropic-ai/sdk is newer (0.123.x), which is itself a fingerprint.
+export const CC_SDK_PACKAGE_VERSION = "0.112.1"
+export const CC_RUNTIME_VERSION = "v26.3.0"
+export const CC_STAINLESS_TIMEOUT = "600"
 export const AGENT_SDK_IDENTITY =
     "You are a Claude agent, built on Anthropic's Claude Agent SDK."
 export const LEGACY_CLI_IDENTITY =
     "You are Claude Code, Anthropic's official CLI for Claude."
 
-// Seed recovered from pi-black's 2.1.224 protocol. Live 2.1.222/2.1.234 native
-// cch did not match this seed (version-rotated). Override via ANTHROPIC_CCH_SEED.
+// Verified 2026-09-09 against two live Claude Code 2.1.266 captures: the seed
+// still reproduces native cch exactly (it has not rotated since 2.1.220-2.1.234).
+// Override via ANTHROPIC_CCH_SEED.
 const DEFAULT_CCH_SEED = 0x4d659218e32a3268n
 
+// The 1M-context beta is model-gated in Claude Code; inserted per request by
+// the fetch patch for models with a 1M window.
+export const LONG_CONTEXT_BETA = "context-1m-2025-08-07"
+
+// Claude Code's 200K-window models. Everything else in pi's Claude catalog
+// (fable-5, opus-4-6/7/8, opus-5, sonnet-4-5/4-6/5) is 1M-capable.
+const CONTEXT_200K_MODEL = /^claude-(haiku-4-5|opus-4-5)(?:-|$)/
+
+export function supportsLongContextBeta(model: string | undefined): boolean {
+    return typeof model === "string" && !CONTEXT_200K_MODEL.test(model)
+}
+
+// Claude Code 2.1.266 first-party default beta set, in wire order, minus the
+// model-gated 1M beta. Live-captured 2026-09-09 on claude-opus-5.
 export const CLAUDE_CODE_BETAS = [
     "claude-code-20250219",
     "oauth-2025-04-20",
@@ -33,6 +55,7 @@ export const CLAUDE_CODE_BETAS = [
     "effort-2025-11-24",
     "fallback-credit-2026-06-01",
     "extended-cache-ttl-2025-04-11",
+    "cache-diagnosis-2026-04-07",
 ].join(",")
 
 export function getCliVersion(): string {
@@ -46,7 +69,9 @@ export function getEntrypoint(): string {
 export function getCchSeed(): bigint {
     const raw = process.env.ANTHROPIC_CCH_SEED
     if (!raw) return DEFAULT_CCH_SEED
-    return BigInt(raw.startsWith("0x") || raw.startsWith("0X") ? raw : `0x${raw}`)
+    return BigInt(
+        raw.startsWith("0x") || raw.startsWith("0X") ? raw : `0x${raw}`,
+    )
 }
 
 export function buildUserAgent(): string {
@@ -102,7 +127,9 @@ function readUint32LE(bytes: Uint8Array, offset: number): bigint {
 }
 
 function readUint64LE(bytes: Uint8Array, offset: number): bigint {
-    return readUint32LE(bytes, offset) | (readUint32LE(bytes, offset + 4) << 32n)
+    return (
+        readUint32LE(bytes, offset) | (readUint32LE(bytes, offset + 4) << 32n)
+    )
 }
 
 function round(accumulator: bigint, input: bigint): bigint {
@@ -166,11 +193,18 @@ export function xxHash64(bytes: Uint8Array, seed = 0n): bigint {
     return hash & MASK_64
 }
 
-/** Structure-aware cch: xxHash64(JSON with model="" and max_tokens removed). */
+/**
+ * Structure-aware cch: xxHash64 over Claude Code's hash view of the final body
+ * — every `model` string emptied and the dispatch-only members omitted.
+ * `fallbacks`/`fallback_credit_token` are pi-only additions the native client
+ * never hashes (Claude Code 2.1.266 omits them from its own hash view too).
+ */
 export function computeCchFromBody(body: Record<string, unknown>): string {
     const normalized = structuredClone(body)
     normalized.model = ""
     delete normalized.max_tokens
+    delete normalized.fallbacks
+    delete normalized.fallback_credit_token
     const hash = xxHash64(
         new TextEncoder().encode(JSON.stringify(normalized)),
         getCchSeed(),
@@ -242,6 +276,47 @@ function isOAuthAnthropic(headers: Headers): boolean {
     return auth.includes("sk-ant-oat")
 }
 
+function modelFromSerializedBody(serialized: string): string | undefined {
+    try {
+        const parsed = JSON.parse(serialized) as { model?: unknown }
+        return typeof parsed.model === "string" ? parsed.model : undefined
+    } catch {
+        return undefined
+    }
+}
+
+function insertBeta(headers: Headers, beta: string): void {
+    const current = headers.get("anthropic-beta")
+    if (!current) return
+    const betas = current
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0)
+    if (betas.includes(beta)) return
+    const anchor = betas.indexOf("oauth-2025-04-20")
+    betas.splice(anchor >= 0 ? anchor + 1 : betas.length, 0, beta)
+    headers.set("anthropic-beta", betas.join(","))
+}
+
+/**
+ * Close the remaining client-identity gaps between pi's SDK and Claude Code:
+ * Stainless version/timeout/runtime headers plus the model-gated 1M beta.
+ */
+export function applyClaudeCodeHeaderFidelity(
+    headers: Headers,
+    serializedBody: string | undefined,
+): void {
+    headers.set("x-stainless-package-version", CC_SDK_PACKAGE_VERSION)
+    headers.set("x-stainless-timeout", CC_STAINLESS_TIMEOUT)
+    headers.set("x-stainless-runtime-version", CC_RUNTIME_VERSION)
+    if (
+        serializedBody !== undefined &&
+        supportsLongContextBeta(modelFromSerializedBody(serializedBody))
+    ) {
+        insertBeta(headers, LONG_CONTEXT_BETA)
+    }
+}
+
 let fetchPatched = false
 let activeSessionId: string | undefined
 
@@ -275,21 +350,25 @@ export function installClaudeCodeFetchPatch(): void {
             headers.set("x-claude-code-session-id", activeSessionId)
         }
 
-        if (typeof init?.body === "string") {
-            return original(url, {
-                ...init,
-                headers,
-                body: patchClaudeCodeCch(init.body),
-            })
-        }
-        if (input instanceof Request) {
-            const body = await input.clone().text()
+        const serializedBody =
+            typeof init?.body === "string"
+                ? init.body
+                : input instanceof Request
+                  ? await input.clone().text()
+                  : undefined
+        applyClaudeCodeHeaderFidelity(headers, serializedBody)
+
+        if (serializedBody !== undefined) {
+            const patched = patchClaudeCodeCch(serializedBody)
+            if (typeof init?.body === "string") {
+                return original(url, { ...init, headers, body: patched })
+            }
             return original(
                 new Request(url, {
-                    method: input.method,
+                    method: (input as Request).method,
                     headers,
-                    body: patchClaudeCodeCch(body),
-                    signal: init?.signal ?? input.signal,
+                    body: patched,
+                    signal: init?.signal ?? (input as Request).signal,
                 }),
             )
         }

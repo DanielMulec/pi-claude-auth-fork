@@ -22,20 +22,28 @@ import {
     buildBillingHeaderValue,
     buildUserAgent,
     CC_ENTRYPOINT,
+    CLAUDE_CODE_BETAS,
     getCliVersion,
+    LONG_CONTEXT_BETA,
+    patchClaudeCodeCch,
 } from "../src/signing.ts"
 
 const API_URL = "https://api.anthropic.com/v1/messages"
 const IDENTITY = "You are Claude Code, Anthropic's official CLI for Claude."
 
-// pi 0.83's built-in OAuth request shape (from pi-ai/dist/api/anthropic-messages.js)
+// pi 0.85's built-in OAuth request shape (from pi-ai/dist/api/anthropic-messages.js)
 const PI_BETAS =
     "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14,interleaved-thinking-2025-05-14"
-const PI_UA = "claude-cli/2.1.75"
+const PI_UA = "claude-cli/2.1.251"
 
-// Claude Code 2.1.222 live-captured OAuth request shape (see research brief 08)
-const CC_BETAS =
-    "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,thinking-token-count-2026-05-13,context-management-2025-06-27,prompt-caching-scope-2026-01-05,mid-conversation-system-2026-04-07,advisor-tool-2026-03-01,effort-2025-11-24,fallback-credit-2026-06-01,extended-cache-ttl-2025-04-11"
+// Claude Code 2.1.266 live-captured OAuth request shape (2026-09-09).
+// Both probe models are 1M-capable, so the 1M beta is part of the real shape.
+const CC_BETAS = (() => {
+    const betas = CLAUDE_CODE_BETAS.split(",")
+    const anchor = betas.indexOf("oauth-2025-04-20")
+    betas.splice(anchor + 1, 0, LONG_CONTEXT_BETA)
+    return betas.join(",")
+})()
 
 const MODEL = process.argv.slice(2).includes("opus")
     ? "claude-opus-5"
@@ -128,12 +136,18 @@ async function send(
         messages: [{ role: "user", content: USER_TEXT }],
         stream: false,
     }
+    // The cc shape must carry a real cch, not the placeholder: 2.1.266 hashes
+    // the final body and Anthropic rejects unpatched placeholders on OAuth.
+    const serialized =
+        shape === "cc"
+            ? patchClaudeCodeCch(JSON.stringify(body))
+            : JSON.stringify(body)
 
     try {
         const res = await fetch(url, {
             method: "POST",
             headers,
-            body: JSON.stringify(body),
+            body: serialized,
         })
         const lane = extract(res.headers)
         const text = await res.text()

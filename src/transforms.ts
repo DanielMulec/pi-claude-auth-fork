@@ -81,7 +81,7 @@ export function discoverClaudeCodeIdentity(): ClaudeCodeIdentity | undefined {
 }
 
 /**
- * Shape an Anthropic OAuth payload like live Claude Code 2.1.234:
+ * Shape an Anthropic OAuth payload like live Claude Code 2.1.266:
  * system[0] billing header, system[1] Agent SDK identity, then Pi's prompt.
  */
 export function injectBillingHeader(

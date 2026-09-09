@@ -16,7 +16,11 @@ test("injectBillingHeader: billing + Agent SDK identity, keeps extra system", ()
         model: "claude-sonnet-4-6",
         system: [
             { type: "text", text: LEGACY_CLI_IDENTITY },
-            { type: "text", text: "Pi system", cache_control: { type: "ephemeral" } },
+            {
+                type: "text",
+                text: "Pi system",
+                cache_control: { type: "ephemeral" },
+            },
         ],
         messages: [{ role: "user", content: "Reply with exactly: PROBE_OK" }],
     }
@@ -25,11 +29,14 @@ test("injectBillingHeader: billing + Agent SDK identity, keeps extra system", ()
         accountUuid: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
     })
     assert.ok(out)
-    const system = out.system as Array<{ text: string; cache_control?: unknown }>
+    const system = out.system as Array<{
+        text: string
+        cache_control?: unknown
+    }>
     assert.equal(system.length, 3)
     assert.match(
         system[0].text,
-        /^x-anthropic-billing-header: cc_version=2\.1\.234\.1c7; cc_entrypoint=sdk-cli; cch=00000; cc_prompt_id=[0-9a-f-]{36};$/,
+        /^x-anthropic-billing-header: cc_version=2\.1\.266\.687; cc_entrypoint=sdk-cli; cch=00000; cc_prompt_id=[0-9a-f-]{36};$/,
     )
     assert.equal(system[1].text, AGENT_SDK_IDENTITY)
     assert.equal(system[2].text, "Pi system")
@@ -71,7 +78,11 @@ test("injectBillingHeader: idempotent", () => {
     const second = injectBillingHeader(first)
     assert.ok(second)
     const system = second.system as Array<{ text: string }>
-    assert.equal(system.filter((e) => e.text.startsWith("x-anthropic-billing-header")).length, 1)
+    assert.equal(
+        system.filter((e) => e.text.startsWith("x-anthropic-billing-header"))
+            .length,
+        1,
+    )
     assert.equal(system.filter((e) => e.text === AGENT_SDK_IDENTITY).length, 1)
 })
 
@@ -79,7 +90,9 @@ test("parseClaudeCodeIdentity: rejects bad ids", () => {
     assert.equal(
         parseClaudeCodeIdentity({
             userID: "bad",
-            oauthAccount: { accountUuid: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee" },
+            oauthAccount: {
+                accountUuid: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+            },
         }),
         undefined,
     )

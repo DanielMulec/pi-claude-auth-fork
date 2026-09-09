@@ -1,12 +1,16 @@
 import assert from "node:assert/strict"
 import { afterEach, test } from "node:test"
 import {
+    applyClaudeCodeHeaderFidelity,
     buildBillingHeaderValue,
     buildUserAgent,
+    CC_SDK_PACKAGE_VERSION,
     CC_VERSION,
     computeVersionSuffix,
     extractFirstUserMessageText,
+    LONG_CONTEXT_BETA,
     patchClaudeCodeCch,
+    supportsLongContextBeta,
     xxHash64,
 } from "./signing.ts"
 
@@ -39,11 +43,13 @@ test("extractFirstUserMessageText: first text block", () => {
     )
 })
 
-test("computeVersionSuffix: live 2.1.234 PROBE_OK suffix", () => {
+test("computeVersionSuffix: live 2.1.266 captures", () => {
     assert.equal(
-        computeVersionSuffix("Reply with exactly: PROBE_OK", "2.1.234"),
-        "1c7",
+        computeVersionSuffix("Reply with exactly: PROBE_OK", "2.1.266"),
+        "687",
     )
+    // 2026-09-09 live capture: cc_version=2.1.266.fce for the prompt "say hi"
+    assert.equal(computeVersionSuffix("say hi", "2.1.266"), "fce")
 })
 
 test("xxHash64: standard vectors", () => {
@@ -92,16 +98,84 @@ test("patchClaudeCodeCch: strips fallbacks without billing header", () => {
     assert.equal("fallbacks" in out, false)
 })
 
-test("buildBillingHeaderValue: 2.1.234 live shape", () => {
+test("patchClaudeCodeCch: live 2.1.266 vector", () => {
+    delete process.env.ANTHROPIC_CCH_SEED
+    const body =
+        '{"model":"claude-opus-5","messages":[{"role":"user","content":[{"type":"text","text":"say hi"}]}],"max_tokens":64000,"stream":true,"system":[{"type":"text","text":"x-anthropic-billing-header: cc_version=2.1.266.fce; cc_entrypoint=sdk-cli; cch=00000; cc_prompt_id=00000000-0000-4000-8000-000000000000;"}]}'
+    assert.match(patchClaudeCodeCch(body), /cch=4d1ff/)
+})
+
+test("patchClaudeCodeCch: pi-only fallbacks stay out of the hash view", () => {
+    delete process.env.ANTHROPIC_CCH_SEED
+    const body = JSON.stringify({
+        model: "claude-opus-5",
+        messages: [
+            { role: "user", content: [{ type: "text", text: "say hi" }] },
+        ],
+        max_tokens: 64000,
+        stream: true,
+        system: [
+            {
+                type: "text",
+                text: "x-anthropic-billing-header: cc_version=2.1.266.fce; cc_entrypoint=sdk-cli; cch=00000; cc_prompt_id=00000000-0000-4000-8000-000000000000;",
+            },
+        ],
+        fallbacks: [{ model: "claude-opus-4-8" }],
+    })
+    assert.match(patchClaudeCodeCch(body), /cch=4d1ff/)
+})
+
+test("applyClaudeCodeHeaderFidelity: stainless identity + 1M beta", () => {
+    const headers = new Headers({
+        "anthropic-beta":
+            "claude-code-20250219,oauth-2025-04-20,effort-2025-11-24",
+    })
+    applyClaudeCodeHeaderFidelity(
+        headers,
+        '{"model":"claude-opus-5","messages":[]}',
+    )
+    assert.equal(
+        headers.get("x-stainless-package-version"),
+        CC_SDK_PACKAGE_VERSION,
+    )
+    assert.equal(
+        headers.get("anthropic-beta"),
+        `claude-code-20250219,oauth-2025-04-20,${LONG_CONTEXT_BETA},effort-2025-11-24`,
+    )
+})
+
+test("applyClaudeCodeHeaderFidelity: no 1M beta on 200K models", () => {
+    const headers = new Headers({
+        "anthropic-beta": "claude-code-20250219,oauth-2025-04-20",
+    })
+    applyClaudeCodeHeaderFidelity(
+        headers,
+        '{"model":"claude-haiku-4-5","messages":[]}',
+    )
+    assert.equal(
+        headers.get("anthropic-beta"),
+        "claude-code-20250219,oauth-2025-04-20",
+    )
+})
+
+test("supportsLongContextBeta: catalog windows", () => {
+    assert.equal(supportsLongContextBeta("claude-opus-5"), true)
+    assert.equal(supportsLongContextBeta("claude-sonnet-5"), true)
+    assert.equal(supportsLongContextBeta("claude-haiku-4-5"), false)
+    assert.equal(supportsLongContextBeta("claude-opus-4-5"), false)
+    assert.equal(supportsLongContextBeta(undefined), false)
+})
+
+test("buildBillingHeaderValue: 2.1.266 live shape", () => {
     const header = buildBillingHeaderValue(
         [{ role: "user", content: "Reply with exactly: PROBE_OK" }],
-        "2.1.234",
+        "2.1.266",
         "sdk-cli",
         "6d3eeb40-a69c-4013-a9d5-5cf59b1923ac",
     )
     assert.equal(
         header,
-        "x-anthropic-billing-header: cc_version=2.1.234.1c7; cc_entrypoint=sdk-cli; cch=00000; cc_prompt_id=6d3eeb40-a69c-4013-a9d5-5cf59b1923ac;",
+        "x-anthropic-billing-header: cc_version=2.1.266.687; cc_entrypoint=sdk-cli; cch=00000; cc_prompt_id=6d3eeb40-a69c-4013-a9d5-5cf59b1923ac;",
     )
 })
 
@@ -109,9 +183,9 @@ test("buildUserAgent: default Claude Code form", () => {
     delete process.env.ANTHROPIC_USER_AGENT
     delete process.env.ANTHROPIC_CLI_VERSION
     delete process.env.CLAUDE_CODE_ENTRYPOINT
-    assert.equal(buildUserAgent(), "claude-cli/2.1.234 (external, sdk-cli)")
+    assert.equal(buildUserAgent(), "claude-cli/2.1.266 (external, sdk-cli)")
 })
 
 test("CC_VERSION: pinned to live-captured Claude Code release", () => {
-    assert.equal(CC_VERSION, "2.1.234")
+    assert.equal(CC_VERSION, "2.1.266")
 })
