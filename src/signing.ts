@@ -9,13 +9,14 @@ const PRIME64_3 = 0x165667b19e3779f9n
 const PRIME64_4 = 0x85ebca77c2b2ae63n
 const PRIME64_5 = 0x27d4eb2f165667c5n
 
-// Live-captured Claude Code 2.1.266 (2026-09-09, build 2026-09-08T23:01:17Z,
-// git eb01d6090964). Override via ANTHROPIC_CLI_VERSION.
-export const CC_VERSION = "2.1.266"
+// Live-captured Claude Code 2.1.267 (2026-09-10, build 2026-09-09T17:26:03Z,
+// git a9e1808c8204fef901336d54bac7d4ab442955cb). Override via ANTHROPIC_CLI_VERSION.
+export const CC_VERSION = "2.1.267"
 export const CC_ENTRYPOINT = "sdk-cli"
 
-// SDK/runtime identity Claude Code 2.1.266 reports in X-Stainless-* headers.
-// pi's own @anthropic-ai/sdk is newer (0.123.x), which is itself a fingerprint.
+// SDK/runtime identity Claude Code 2.1.267 reports in X-Stainless-* headers
+// (identical to 2.1.266). pi's own @anthropic-ai/sdk is newer (0.123.x), which
+// is itself a fingerprint.
 export const CC_SDK_PACKAGE_VERSION = "0.112.1"
 export const CC_RUNTIME_VERSION = "v26.3.0"
 export const CC_STAINLESS_TIMEOUT = "600"
@@ -24,7 +25,7 @@ export const AGENT_SDK_IDENTITY =
 export const LEGACY_CLI_IDENTITY =
     "You are Claude Code, Anthropic's official CLI for Claude."
 
-// Verified 2026-09-09 against two live Claude Code 2.1.266 captures: the seed
+// Verified 2026-09-10 against two live Claude Code 2.1.267 captures: the seed
 // still reproduces native cch exactly (it has not rotated since 2.1.220-2.1.234).
 // Override via ANTHROPIC_CCH_SEED.
 const DEFAULT_CCH_SEED = 0x4d659218e32a3268n
@@ -41,8 +42,9 @@ export function supportsLongContextBeta(model: string | undefined): boolean {
     return typeof model === "string" && !CONTEXT_200K_MODEL.test(model)
 }
 
-// Claude Code 2.1.266 first-party default beta set, in wire order, minus the
-// model-gated 1M beta. Live-captured 2026-09-09 on claude-opus-5.
+// Claude Code 2.1.267 first-party default beta set, in wire order, minus the
+// model-gated 1M beta. Live-captured 2026-09-10 on claude-opus-5; unchanged
+// from 2.1.266.
 export const CLAUDE_CODE_BETAS = [
     "claude-code-20250219",
     "oauth-2025-04-20",
@@ -86,6 +88,11 @@ interface Message {
     content?: string | Array<{ type?: string; text?: string }>
 }
 
+// Mirrors native Claude Code's prompt extraction (`tls` in the 2.1.267 bundle):
+// first user message, first text block. Claude Code computes the billing-header
+// version suffix from this string *before* meta reminders are merged into the
+// serialized body, which is why a live CC body's first block (a reminder) is not
+// the suffix input even though `tls` takes the first text block.
 export function extractFirstUserMessageText(messages: Message[]): string {
     const userMsg = messages.find((m) => m.role === "user")
     if (!userMsg) return ""
@@ -197,7 +204,7 @@ export function xxHash64(bytes: Uint8Array, seed = 0n): bigint {
  * Structure-aware cch: xxHash64 over Claude Code's hash view of the final body
  * — every `model` string emptied and the dispatch-only members omitted.
  * `fallbacks`/`fallback_credit_token` are pi-only additions the native client
- * never hashes (Claude Code 2.1.266 omits them from its own hash view too).
+ * never hashes (Claude Code 2.1.267 omits them from its own hash view too).
  */
 export function computeCchFromBody(body: Record<string, unknown>): string {
     const normalized = structuredClone(body)

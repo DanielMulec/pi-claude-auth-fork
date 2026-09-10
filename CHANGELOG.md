@@ -1,5 +1,33 @@
 # Changelog
 
+# [0.5.0](https://github.com/pankajudhas81/pi-claude-auth/compare/v0.4.0...v0.5.0) (2026-09-10) — fork release
+
+### Changed
+
+- Bump pinned Claude Code version `2.1.266` → **`2.1.267`** (`src/signing.ts`,
+  build 2026-09-09T17:26:03Z, git `a9e1808c8204fef901336d54bac7d4ab442955cb`).
+  2.1.267 is protocol-identical to 2.1.266 apart from the version string: same
+  beta set, same `X-Stainless-*` identity headers, same body shape, same native
+  `cch` hash view.
+
+### Verified
+
+- **Seed unchanged and confirmed:** two live Claude Code 2.1.267 captures
+  (`/v1/messages?beta=true`, `sdk-cli`) are reproduced byte-exactly by
+  `xxHash64(hash_view, 0x4d659218e32a3268) & 0xfffff` (`say hi` → `d68c4`;
+  `explain the number seven briefly` → `59865`).
+- `cc_version` suffix algorithm re-verified against live 2.1.267
+  (`say hi` → `f30`; `explain the number seven briefly` → `75d`). Binary
+  cross-check confirms the suffix input is the first text block of the first
+  non-meta user message (native `tls` function), computed before meta reminders
+  are merged into the serialized body.
+- End-to-end capture of pi's own OAuth request through the extension: the
+  emitted `cch` matches the same reference implementation, and the header/UA/
+  beta/Stainless shape matches the 2.1.267 capture.
+- Billing lane re-checked live 2026-09-10 (`pnpm run lane:check` and
+  `lane:check opus`): HTTP 200, `overage-utilization: 0.0`, plan buckets
+  consumed for both the pi shape and the 2.1.267 shape.
+
 # [0.4.0](https://github.com/pankajudhas81/pi-claude-auth/compare/v0.3.0...v0.4.0) (2026-09-09) — fork release
 
 ### Changed

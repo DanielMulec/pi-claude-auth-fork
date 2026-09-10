@@ -44,7 +44,7 @@ const MODELS = [
 const API_URL = "https://api.anthropic.com/v1/messages"
 const SYSTEM_IDENTITY =
     "You are Claude Code, Anthropic's official CLI for Claude."
-const CLI_VERSION = process.env.ANTHROPIC_CLI_VERSION ?? "2.1.266"
+const CLI_VERSION = process.env.ANTHROPIC_CLI_VERSION ?? "2.1.267"
 
 const c = {
     green: (s: string) => `\x1b[32m${s}\x1b[0m`,

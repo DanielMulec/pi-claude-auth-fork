@@ -36,7 +36,7 @@ const PI_BETAS =
     "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14,interleaved-thinking-2025-05-14"
 const PI_UA = "claude-cli/2.1.251"
 
-// Claude Code 2.1.266 live-captured OAuth request shape (2026-09-09).
+// Claude Code 2.1.267 live-captured OAuth request shape (2026-09-10).
 // Both probe models are 1M-capable, so the 1M beta is part of the real shape.
 const CC_BETAS = (() => {
     const betas = CLAUDE_CODE_BETAS.split(",")
@@ -136,7 +136,7 @@ async function send(
         messages: [{ role: "user", content: USER_TEXT }],
         stream: false,
     }
-    // The cc shape must carry a real cch, not the placeholder: 2.1.266 hashes
+    // The cc shape must carry a real cch, not the placeholder: 2.1.267 hashes
     // the final body and Anthropic rejects unpatched placeholders on OAuth.
     const serialized =
         shape === "cc"

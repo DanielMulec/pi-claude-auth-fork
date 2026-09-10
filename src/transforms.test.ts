@@ -36,7 +36,7 @@ test("injectBillingHeader: billing + Agent SDK identity, keeps extra system", ()
     assert.equal(system.length, 3)
     assert.match(
         system[0].text,
-        /^x-anthropic-billing-header: cc_version=2\.1\.266\.687; cc_entrypoint=sdk-cli; cch=00000; cc_prompt_id=[0-9a-f-]{36};$/,
+        /^x-anthropic-billing-header: cc_version=2\.1\.267\.124; cc_entrypoint=sdk-cli; cch=00000; cc_prompt_id=[0-9a-f-]{36};$/,
     )
     assert.equal(system[1].text, AGENT_SDK_IDENTITY)
     assert.equal(system[2].text, "Pi system")

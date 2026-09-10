@@ -1,10 +1,10 @@
 # pi-claude-auth
 
-> **Fork status (v0.4.0):** maintained fork of upstream `pi-claude-auth@0.1.3` (last upstream release 2026-06-04).
+> **Fork status (v0.5.0):** maintained fork of upstream `pi-claude-auth@0.1.3` (last upstream release 2026-06-04).
 > Changes vs upstream:
 >
-> - **Claude Code version pin bumped `2.1.222` → `2.1.234` → `2.1.266`** (live-captured 2026-09-09: Agent SDK identity, `cc_prompt_id`, fetch-time `cch`, current beta set, Stainless identity headers)
-> - **`cch` verified against live Claude Code 2.1.266** — the recovered seed (`4d659218e32a3268`) plus Claude Code's hash view (empty `model`, dropped `max_tokens`/`fallbacks`) reproduces native `cch` on live captures
+> - **Claude Code version pin bumped `2.1.222` → `2.1.234` → `2.1.266` → `2.1.267`** (live-captured 2026-09-10: Agent SDK identity, `cc_prompt_id`, fetch-time `cch`, current beta set, Stainless identity headers)
+> - **`cch` verified against live Claude Code 2.1.267** — the recovered seed (`4d659218e32a3268`) plus Claude Code's hash view (empty `model`, dropped `max_tokens`/`fallbacks`) reproduces native `cch` on live captures
 > - **pi ≥ 0.83 compatibility**: `ModelRegistry.authStorage` (removed in 0.83) is now feature-detected; auth.json seeding + `/login` cover the current session
 > - **New models added to the smoke-test list**: `claude-sonnet-5`, `claude-opus-5`
 
@@ -187,7 +187,7 @@ one account is found, the picker is skipped.
 
 ### Claude Code version pinning
 
-The Claude Code version is pinned to `2.1.266` for billing header computation.
+The Claude Code version is pinned to `2.1.267` for billing header computation.
 If billing reverts to extra usage after a Claude Code update, override:
 
 ```bash
@@ -247,7 +247,7 @@ write-back is enabled by default to keep your stored credentials valid.
 | ----------------------- | ----------------------------------------------------------------------- | ------------------ |
 | `PI_CODING_AGENT_DIR`   | pi's config directory (where `auth.json` lives)                         | `~/.pi/agent`      |
 | `PI_CLAUDE_AUTH_DEBUG`  | Enable diagnostic logging (`1` for default path, or a custom file path) | disabled           |
-| `ANTHROPIC_CLI_VERSION` | Claude CLI version for billing headers                                  | `2.1.266`          |
+| `ANTHROPIC_CLI_VERSION` | Claude CLI version for billing headers                                  | `2.1.267`          |
 | `ANTHROPIC_CCH_SEED`    | 64-bit hex seed for structure-aware `cch` (native seed rotates)         | `4d659218e32a3268` |
 
 ## How it works
