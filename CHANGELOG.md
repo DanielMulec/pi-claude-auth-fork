@@ -1,5 +1,46 @@
 # Changelog
 
+# [0.5.1](https://github.com/pankajudhas81/pi-claude-auth/compare/v0.5.0...v0.5.1) (2026-09-11) — fork release
+
+### Fixed
+
+- **The captured Claude Code beta set is merged into pi's beta list instead of
+  replacing it.** pi-ai treats a configured `anthropic-beta` header as a full
+  replacement for the list it derives from a model's compat flags
+  (`getBetaFeatures()`, pi-ai 0.85.1), and the extension declared
+  `CLAUDE_CODE_BETAS` through `pi.registerProvider(...).headers`. That silently
+  deleted `mid-conversation-output-config-2026-07-01` and
+  `thinking-binding-controls-2026-08-01`, which pi adds for models carrying
+  `compat.supportsMidConvoEffort` — `claude-fable-5-1` and `claude-opus-5`.
+  Anthropic rejected those requests with
+  `messages.1.output_config: Extra inputs are not permitted`, so both models were
+  unusable on the subscription lane.
+
+    - `src/index.ts` — no longer declares `anthropic-beta` as provider metadata
+      (keeps `user-agent` / `x-app`)
+    - `src/signing.ts` — adds `mergeCapturedBetas()`, called from the fetch patch
+      after `applyClaudeCodeHeaderFidelity()`: pi's list and its order stay
+      authoritative, the captured set is appended and de-duplicated.
+      `CLAUDE_CODE_BETAS` itself is unchanged
+    - `src/signing.test.ts` — encodes the invariant *never removes a beta pi
+      computed*
+
+  Side effect: the Claude Code beta fingerprint no longer leaks onto non-OAuth
+  API-key requests, since the fetch patch only engages for `sk-ant-oat` tokens.
+
+### Verified
+
+- `pnpm test` 43/43 pass (3 new); `pnpm build`, `oxlint` and `oxfmt --check`
+  clean.
+- End-to-end through the extension's own `installClaudeCodeFetchPatch()`:
+  `claude-fable-5-1` and `claude-opus-5` emit 15 betas — all 12 captured entries
+  preserved, `context-1m-2025-08-07` still injected by the existing model-gated
+  rule, plus pi's two per-message-effort betas. Body shape unchanged and the
+  per-message `output_config.effort` value intact.
+- `scripts/lane-check.ts` is deliberately untouched so the 2026-09-10 lane
+  baseline stays comparable; its "shape B" is now marginally narrower than the
+  extension's real traffic.
+
 # [0.5.0](https://github.com/pankajudhas81/pi-claude-auth/compare/v0.4.0...v0.5.0) (2026-09-10) — fork release
 
 ### Changed

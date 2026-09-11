@@ -45,6 +45,13 @@ export function supportsLongContextBeta(model: string | undefined): boolean {
 // Claude Code 2.1.267 first-party default beta set, in wire order, minus the
 // model-gated 1M beta. Live-captured 2026-09-10 on claude-opus-5; unchanged
 // from 2.1.266.
+//
+// This is merged into pi's computed beta list (see `mergeCapturedBetas`), never
+// asserted as a replacement. pi-ai treats a configured `anthropic-beta` header
+// as a full override of its own derivation, so handing this list to
+// `pi.registerProvider` silently removed every beta pi adds from a model's
+// compat flags — including the per-message-effort betas that
+// `claude-fable-5-1` and `claude-opus-5` need.
 export const CLAUDE_CODE_BETAS = [
     "claude-code-20250219",
     "oauth-2025-04-20",
@@ -292,6 +299,35 @@ function modelFromSerializedBody(serialized: string): string | undefined {
     }
 }
 
+/**
+ * Merge Claude Code's captured first-party beta set into the list pi computed
+ * for this request, keeping pi's entries and their order intact.
+ *
+ * pi-ai decides its beta list in `getBetaFeatures()` and treats a configured
+ * `anthropic-beta` header as a complete replacement (`configuredFeatures !==
+ * undefined` returns early). Declaring the captured set as a provider header
+ * therefore *subtracted* betas pi derives from a model's compat flags. For
+ * models with `supportsMidConvoEffort` that dropped
+ * `mid-conversation-output-config-2026-07-01` and
+ * `thinking-binding-controls-2026-08-01`, and the API answered
+ * `messages.N.output_config: Extra inputs are not permitted`.
+ *
+ * Merging here instead makes the captured set purely additive: pi stays
+ * authoritative for feature betas, so betas for future pi features cannot be
+ * dropped by this extension.
+ */
+export function mergeCapturedBetas(headers: Headers): void {
+    const current = headers.get("anthropic-beta")
+    const betas = (current ?? "")
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0)
+    for (const beta of CLAUDE_CODE_BETAS.split(",")) {
+        if (!betas.includes(beta)) betas.push(beta)
+    }
+    headers.set("anthropic-beta", betas.join(","))
+}
+
 function insertBeta(headers: Headers, beta: string): void {
     const current = headers.get("anthropic-beta")
     if (!current) return
@@ -364,6 +400,7 @@ export function installClaudeCodeFetchPatch(): void {
                   ? await input.clone().text()
                   : undefined
         applyClaudeCodeHeaderFidelity(headers, serializedBody)
+        mergeCapturedBetas(headers)
 
         if (serializedBody !== undefined) {
             const patched = patchClaudeCodeCch(serializedBody)

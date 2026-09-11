@@ -4,11 +4,13 @@ import {
     applyClaudeCodeHeaderFidelity,
     buildBillingHeaderValue,
     buildUserAgent,
+    CLAUDE_CODE_BETAS,
     CC_SDK_PACKAGE_VERSION,
     CC_VERSION,
     computeVersionSuffix,
     extractFirstUserMessageText,
     LONG_CONTEXT_BETA,
+    mergeCapturedBetas,
     patchClaudeCodeCch,
     supportsLongContextBeta,
     xxHash64,
@@ -173,6 +175,54 @@ test("applyClaudeCodeHeaderFidelity: no 1M beta on 200K models", () => {
         headers.get("anthropic-beta"),
         "claude-code-20250219,oauth-2025-04-20",
     )
+})
+
+test("mergeCapturedBetas: never removes a beta pi computed", () => {
+    // Regression guard for claude-fable-5-1 / claude-opus-5. pi-ai derives these
+    // from `supportsMidConvoEffort`; pinning the captured set as a provider
+    // header made pi-ai replace its whole list with the captured one and the API
+    // rejected the message-level output_config it had already been sent.
+    const piComputed = [
+        "claude-code-20250219",
+        "oauth-2025-04-20",
+        "mid-conversation-output-config-2026-07-01",
+        "thinking-binding-controls-2026-08-01",
+    ].join(",")
+    const headers = new Headers({ "anthropic-beta": piComputed })
+
+    mergeCapturedBetas(headers)
+
+    const betas = (headers.get("anthropic-beta") ?? "").split(",")
+    for (const beta of piComputed.split(",")) {
+        assert.ok(betas.includes(beta), `dropped pi beta: ${beta}`)
+    }
+    for (const beta of CLAUDE_CODE_BETAS.split(",")) {
+        assert.ok(betas.includes(beta), `missing captured beta: ${beta}`)
+    }
+    assert.equal(new Set(betas).size, betas.length, "duplicate beta")
+})
+
+test("mergeCapturedBetas: keeps pi's order, appending only what it lacks", () => {
+    const headers = new Headers({
+        "anthropic-beta": "claude-code-20250219,oauth-2025-04-20",
+    })
+
+    mergeCapturedBetas(headers)
+
+    const betas = (headers.get("anthropic-beta") ?? "").split(",")
+    assert.deepEqual(betas.slice(0, 2), [
+        "claude-code-20250219",
+        "oauth-2025-04-20",
+    ])
+    assert.equal(betas.length, CLAUDE_CODE_BETAS.split(",").length)
+})
+
+test("mergeCapturedBetas: sets the captured set when pi computed none", () => {
+    const headers = new Headers()
+
+    mergeCapturedBetas(headers)
+
+    assert.equal(headers.get("anthropic-beta"), CLAUDE_CODE_BETAS)
 })
 
 test("supportsLongContextBeta: catalog windows", () => {

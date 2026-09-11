@@ -19,7 +19,6 @@ import { readAllClaudeAccounts, type ClaudeAccount } from "./keychain.ts"
 import { initLogger, log } from "./logger.ts"
 import {
     buildUserAgent,
-    CLAUDE_CODE_BETAS,
     installClaudeCodeFetchPatch,
     setActiveSessionId,
 } from "./signing.ts"
@@ -263,12 +262,18 @@ const extension = async (pi: ExtensionAPI): Promise<void> => {
     // `claude-cli/<version>`, which Anthropic's plan-billing validation does
     // not accept — without this the request bills against extra usage instead
     // of the subscription plan.
+    //
+    // The Claude Code beta set is deliberately NOT declared here. pi-ai treats
+    // a configured `anthropic-beta` header as a full replacement for its own
+    // derived list, so pinning the captured set here deleted the betas pi adds
+    // from a model's compat flags and broke per-message effort on
+    // claude-fable-5-1 / claude-opus-5. The captured set is merged additively at
+    // fetch time instead — see `mergeCapturedBetas` in ./signing.ts.
     pi.registerProvider(PROVIDER_ID, {
         oauth,
         headers: {
             "user-agent": buildUserAgent(),
             "x-app": "cli",
-            "anthropic-beta": CLAUDE_CODE_BETAS,
         },
     })
 

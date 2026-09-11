@@ -290,6 +290,11 @@ request fidelity (identity, beta flags, tool naming) for OAuth tokens.
   is lazy, only when pi requests it or a request needs a fresh token)
 - pi's built-in Anthropic provider applies the Claude Code identity, beta flags,
   and tool-name conventions for OAuth tokens, so requests look like Claude Code
+- The captured Claude Code first-party beta set is **merged into** pi's computed
+  list at fetch time (`mergeCapturedBetas`) rather than declared as provider
+  metadata. pi-ai treats a configured `anthropic-beta` header as a full
+  replacement, so declaring the list here would drop the betas pi derives from a
+  model's compat flags — the merge is strictly additive
 - If credentials aren't OAuth-based or can't be read, the extension disables
   itself and pi continues with its standard Anthropic auth
 
