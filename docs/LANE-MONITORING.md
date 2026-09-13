@@ -1,21 +1,38 @@
-# Lane Monitoring — billing-lane verification
+# Billing Monitoring — plan windows vs extra usage
 
 This fork routes Anthropic requests with Claude Code's fingerprint so they bill
-against the Claude Pro/Max **subscription plan** rather than per-token
-**extra usage / usage credits**. The billing lane is decided server-side by an
-undocumented classifier that has changed repeatedly (Apr 4, Apr 8, Jun 15 2026) — so the lane is verified **empirically**, not assumed.
+against the Claude Pro/Max **plan windows** rather than per-token **extra usage
+(usage credits)**. Which entitlement pays is decided server-side by an
+undocumented classifier that has changed repeatedly (Apr 4, Apr 8, Jun 15 2026) — so the billing is verified **empirically**, not assumed.
 
-## Baseline (2026-09-10)
+> Anthropic's own vocabulary, used throughout: **unified rate limits** (the
+> `anthropic-ratelimit-unified-*` response headers), **session window** (5h),
+> **weekly window** (7d), **overage**, and **extra usage** with **used
+> credits**. The file name, the `lane:check` npm script and a few type names
+> keep the older "lane" wording; the script prints the messages you are reading
+> about.
+
+## Baseline (2026-09-10, re-verified 2026-09-13)
 
 Account: Claude Pro, token from macOS Keychain (Claude Code OAuth session).
-Claude Code binary: **2.1.267** (build 2026-09-09T17:26:03Z, git `a9e1808c8204fef901336d54bac7d4ab442955cb`).
+Claude Code binary at baseline: **2.1.267** (build 2026-09-09T17:26:03Z, git `a9e1808c8204fef901336d54bac7d4ab442955cb`).
 The `cch` seed (`0x4d659218e32a3268`) and the hash view were re-verified against
 two live 2.1.267 captures — see [Fingerprint verification](#fingerprint-verification-2026-09-10).
-Result (2026-09-10): **both request shapes land on the plan lane** — HTTP 200,
+Result (2026-09-10): **both request shapes bill against the plan windows** — HTTP 200,
 `anthropic-ratelimit-unified-overage-utilization: 0.0`, 5h/7d plan buckets
 consumed. Verified for `claude-sonnet-5` and `claude-opus-5`, for both the
 fork's full Claude Code shape (with a live-matching `cch`) and pi's built-in
 OAuth shape.
+
+**Re-verified 2026-09-13 against Claude Code 2.1.270** — see
+[2.1.270 re-verification](#270-re-verification-2026-09-13). Same outcome:
+four probes (sonnet-5 and opus-5, pi shape and Claude Code shape), all HTTP 200,
+overage utilization `0.0`, 5h/7d at 1%.
+
+The release version is **not** pinned in code. `getCliVersion()` reads it from
+`~/.local/share/claude/versions` per request (see `src/claude-version.ts`), so
+this document naming 2.1.267 is a record of when a baseline was taken, not a
+value the extension holds.
 
 **Interpretation:** at baseline, even unshaped traffic bills to the plan
 (classifier currently lenient, consistent with the June 15 pause of
@@ -34,19 +51,20 @@ pnpm run lane:check opus   # A/B on claude-opus-5
 The script sends two tiny requests with the keychain OAuth token:
 
 - **A** — pi's built-in OAuth request shape (identity prompt, no billing header)
-- **B** — full Claude Code shape (billing header, real `cch`, `claude-cli/2.1.267`, 13 betas)
+- **B** — full Claude Code shape (billing header, real `cch`, the Claude Code
+  user-agent at the installed release version, 13 betas)
 
-and prints the billing-lane response headers.
+and prints the unified rate-limit response headers.
 
 ## Reading the output
 
-| Signal                                                          | Meaning                                               |
-| --------------------------------------------------------------- | ----------------------------------------------------- |
-| `overage-status: allowed` + `overage-utilization: 0.0`          | ✅ plan lane — nothing drawn from usage credits       |
-| `overage-utilization: > 0`                                      | ⚠️ **extra-usage lane** — per-token billing active    |
-| `overage-status: blocked`                                       | ⛔ account blocked from extra usage (and not on plan) |
-| `5h` / `7d` utilization rising                                  | ✅ plan-lane buckets being consumed (expected)        |
-| HTTP 400 with "Third-party apps now draw from your extra usage" | ⛔ classifier flagged the request — off plan lane     |
+| Signal                                                          | Meaning                                                   |
+| --------------------------------------------------------------- | --------------------------------------------------------- |
+| `overage-status: allowed` + `overage-utilization: 0.0`          | ✅ plan windows — nothing drawn from extra usage          |
+| `overage-utilization: > 0`                                      | ⚠️ **extra usage** — per-token billing active             |
+| `overage-status: blocked`                                       | ⛔ blocked from extra usage and not covered by the plan   |
+| `5h` / `7d` utilization rising                                  | ✅ plan windows being consumed (expected)                 |
+| HTTP 400 with "Third-party apps now draw from your extra usage" | ⛔ classifier flagged the request — billed to extra usage |
 
 ## Fingerprint verification (2026-09-10)
 
@@ -87,21 +105,75 @@ Also verified from the same binary/capture:
 - beta set, `?beta=true`, `x-claude-code-session-id`, `x-client-request-id`,
   `metadata.user_id`, and the `X-Stainless-*` identity headers.
 
+## 2.1.270 re-verification (2026-09-13)
+
+Claude Code 2.1.270 (build 2026-09-12T18:08:42Z, git `97ecbf7abeb4170dcfd26c4d4b397afd9015030e`).
+Captured the same way as the 2.1.267 baseline — loopback server, real binary,
+no Anthropic traffic.
+
+**Unchanged and reconfirmed:**
+
+- Two live captures reproduce their native `cch` byte-exactly under the same
+  seed (`xxHash64(hash_view, 0x4d659218e32a3268) & 0xfffff`): `say hi` →
+  `2b83b`, `explain the number seven briefly` → `fe2eb`. **The seed has not
+  rotated.**
+- Version suffix algorithm unchanged: `2.1.270.f7f` and `2.1.270.658`, both
+  reproduced by `computeVersionSuffix`.
+- `X-Stainless-package-version` `0.112.1`, `x-stainless-timeout` `600`,
+  `x-stainless-runtime-version` `v26.3.0`, `x-app: cli`, `?beta=true`,
+  `x-claude-code-session-id` — all as captured on 2.1.267.
+- In the 2.1.270 bundle: the billing-header builder, the beta registry
+  (`Te("name", "header")` table), and the whole per-model capability catalog
+  are identical to 2.1.266/267/268.
+
+**Corrected understanding — the beta set is not a function of the version.**
+
+The same 2.1.267 binary, run on 2026-09-13, emits the _same_ beta list as
+2.1.270. What varies is the request, not the client version:
+
+- `context-1m-2025-08-07` is sent **only when the model spec carries `[1m]`**
+  (`dc(e){ return /\[1m\]/i.test(e) }` in the 267 bundle). The 2026-09-10
+  capture ran `claude --print` with no `--model`, so it took the default from
+  `~/.claude/settings.json` — `opus[1m]` — and the 1M beta in the captured list
+  was an artefact of that setting, not a property of Claude Code.
+- `mid-conversation-tool-changes-2026-07-01` is sent for models carrying the
+  `mid_conv_tool_change` capability (opus-5, opus-4-8, fable-5, fable-5-1) and
+  not for sonnet-5 or haiku-4-5. Stable across every run today; absent from
+  `CLAUDE_CODE_BETAS`.
+- `advisor-tool-2026-03-01` appeared in six runs and vanished in four with
+  identical commands — a remotely-evaluated gate, i.e. noise. Not worth
+  matching.
+
+The extension's beta handling is unchanged: pi's computed list stays
+authoritative and the captured set is appended. Both missing betas gate
+features pi never exercises (mid-conversation tool changes, the advisor tool).
+
 ## Re-check cadence
 
-- **After every Claude Code update** (the `CC_VERSION` pin in `src/signing.ts`
-  must track the current Claude Code release; drift is the #1 cause of lane
-  flips). Check current CC version with `claude --version`.
-- **Weekly**, plus after pi updates and after any Anthropic policy news
-  (watch: support.claude.com 12429409 / 15036540, code.claude.com changelog).
+- **After a Claude Code update**, the version needs nothing from you — it is
+  read from the installation. What can still drift is the **shape**: the beta
+  set, the `X-Stainless-*` constants, and the `cch` seed/hash view. Re-run the
+  capture rig (below) when the shape is worth confirming.
+- **After pi updates** — pi's beta derivation, UA, and body fields can move
+  under the extension.
+- **After any Anthropic policy news** — watch support.claude.com 12429409 /
+  15036540 and the code.claude.com changelog.
+- **Any time the billing question is live**, `pnpm run lane:check` is the ~5 s
+  empirical answer. `GET https://api.anthropic.com/api/oauth/usage` with the
+  OAuth token (what Claude Code's own `/usage` calls) reports plan windows and
+  `extra_usage.used_credits` directly, without spending tokens.
 
-## When the lane flips
+## When billing moves to extra usage
 
-1. Bump the pin: `export ANTHROPIC_CLI_VERSION=<new-version>` (immediate
-   override) and/or bump `CC_VERSION` in `src/signing.ts` + the pin tests in
-   `src/signing.test.ts`, re-run `pnpm test`.
-2. Re-run `pnpm run lane:check` — should return to plan lane.
-3. If it stays off-plan, the classifier has changed structurally. Options:
+1. `pnpm run lane:check` still reports it — confirm the request was classified
+   and not merely a transport error (HTTP 400 with "Third-party apps now draw
+   from your extra usage" is the classifier signal).
+2. Check whether the fingerprint has drifted: re-capture the current Claude Code
+   shape and diff it against `CLAUDE_CODE_BETAS`, the `X-Stainless-*` constants,
+   and the `cch` hash view. A shape mismatch is fixable in this extension.
+   A version being _stale_ is not a thing any more — that resolves itself.
+3. If the shape matches and requests still bill to extra usage, the classifier
+   has changed structurally. Options:
     - **Subprocess mode** (the durable sanctioned path): route pi through the
       genuine `claude` CLI (pattern: `rchern/pi-claude-cli`, Cline's "Claude
       Code" provider).
@@ -111,6 +183,13 @@ Also verified from the same binary/capture:
    the response headers during the transition.
 
 ## Known gaps (accepted)
+
+- **Auxiliary pi requests** (compaction/consolidation, background agents) do not
+  pass through the extension's `before_provider_request` hook, so they carry no
+  billing header. They _do_ now get the Claude Code user-agent, the
+  `X-Stainless-*` headers and the merged beta set, because those are applied in
+  the fetch patch — which every OAuth request passes through. They would still
+  flip first if the classifier tightened.
 
 - **Auxiliary pi requests** (compaction/consolidation, background agents) do
   not pass through the extension's `before_provider_request` hook and go

@@ -1,5 +1,63 @@
 # Changelog
 
+# [0.6.0](https://github.com/pankajudhas81/pi-claude-auth/compare/v0.5.1...v0.6.0) (2026-09-13) — fork release
+
+### Changed
+
+- **The Claude Code release version is no longer pinned — it is read from the
+  installation.** `CC_VERSION` was a copy of a value that moves upstream every
+  release, so it went stale silently and every Claude Code update needed a code
+  change. `getCliVersion()` now resolves the newest release under
+  `~/.local/share/claude/versions` per request (see `src/claude-version.ts`).
+  The version is not decoration: it goes on the wire as `user-agent` and inside
+  `cc_version=`, and it is hashed into the version suffix, so a stale copy was
+  both a rejection risk (`claude_code_version_too_old`) and a fingerprint
+  mismatch.
+
+    - `FALLBACK_CC_VERSION` covers a machine with no Claude Code installed; it is
+      announced once on stderr when used, rather than falling back silently
+    - `ANTHROPIC_CLI_VERSION` keeps working and wins over anything on disk
+    - resolution is per request, not cached, so a mid-session Claude Code update
+      is picked up by the next request with no restart
+
+- **The user-agent is re-asserted per request in the fetch patch.** It was set
+  once at extension load through `pi.registerProvider`, so a Claude Code update
+  mid-session would leave later requests claiming the old release while the
+  billing header — rebuilt per request — claimed the new one. A side effect:
+  auxiliary requests (compaction, background agents) now carry the Claude Code
+  user-agent, the `X-Stainless-*` headers and the merged beta set, since the
+  fetch patch sees every OAuth request.
+
+- Test assertions no longer encode a release number. `transforms.test.ts`
+  asserted `cc_version=2.1.267.<suffix>` literally and broke the moment the
+  version resolved from disk — it now matches the shape, with the
+  version-specific vectors kept in `signing.test.ts` where the version is an
+  explicit input.
+
+- **Prose now uses Anthropic's vocabulary for billing.** "Lane" was this
+  fork's own coinage; the terms that appear in Anthropic's response headers are
+  **unified rate limits**, **session window** (5h), **weekly window** (7d),
+  **overage**, and **extra usage**. Code identifiers, the `lane:check` npm
+  script and `scripts/lane-check.ts` keep their names — including the
+  output strings the script prints, now reworded to match.
+
+### Verified
+
+- Two live Claude Code 2.1.270 captures reproduce their native `cch`
+  byte-exactly under the unchanged seed `0x4d659218e32a3268`
+  (`say hi` → `2b83b`, `explain the number seven briefly` → `fe2eb`), and both
+  `cc_version` suffixes reproduce (`f7f`, `658`).
+- The 2.1.270 bundle is fingerprint-identical to 2.1.267: same billing-header
+  builder, same beta registry, same per-model capability catalog, same
+  `X-Stainless-*` constants.
+- End-to-end capture of pi's own request through the extension: `cch`
+  recomputes exactly, suffix matches, and the user-agent reports the installed
+  release without any code holding that number.
+- `pnpm run lane:check` on `claude-sonnet-5` and `claude-opus-5` (pi shape and
+  Claude Code shape): all HTTP 200, `overage-utilization: 0.0`, 5h/7d plan
+  buckets consumed — billing stayed on the plan windows.
+- `pnpm test` 52/52 pass; `pnpm lint` and `tsc` clean.
+
 # [0.5.1](https://github.com/pankajudhas81/pi-claude-auth/compare/v0.5.0...v0.5.1) (2026-09-11) — fork release
 
 ### Fixed

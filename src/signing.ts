@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import { resolveClaudeCodeVersion } from "./claude-version.ts"
 
 const BILLING_SALT = "59cf53e54c78"
 const CCH_PLACEHOLDER = "cch=00000"
@@ -9,14 +10,12 @@ const PRIME64_3 = 0x165667b19e3779f9n
 const PRIME64_4 = 0x85ebca77c2b2ae63n
 const PRIME64_5 = 0x27d4eb2f165667c5n
 
-// Live-captured Claude Code 2.1.267 (2026-09-10, build 2026-09-09T17:26:03Z,
-// git a9e1808c8204fef901336d54bac7d4ab442955cb). Override via ANTHROPIC_CLI_VERSION.
-export const CC_VERSION = "2.1.267"
 export const CC_ENTRYPOINT = "sdk-cli"
 
-// SDK/runtime identity Claude Code 2.1.267 reports in X-Stainless-* headers
-// (identical to 2.1.266). pi's own @anthropic-ai/sdk is newer (0.123.x), which
-// is itself a fingerprint.
+// SDK/runtime identity Claude Code reports in X-Stainless-* headers. Verified
+// unchanged across 2.1.266/267/268/270 — unlike the release version, these do
+// not move every release and nothing server-side enforces them. pi's own
+// @anthropic-ai/sdk is newer (0.123.x), which is itself a fingerprint.
 export const CC_SDK_PACKAGE_VERSION = "0.112.1"
 export const CC_RUNTIME_VERSION = "v26.3.0"
 export const CC_STAINLESS_TIMEOUT = "600"
@@ -67,8 +66,17 @@ export const CLAUDE_CODE_BETAS = [
     "cache-diagnosis-2026-04-07",
 ].join(",")
 
+/**
+ * The Claude Code release this request claims to be.
+ *
+ * Read from the Claude Code installation on this machine rather than held as a
+ * constant, so a Claude Code update needs no code change here. The value goes
+ * on the wire twice — as `user-agent` and inside `cc_version=` — and is also an
+ * input to the version suffix hash, so a stale copy is both a rejection risk
+ * and a fingerprint mismatch. Resolved per call; see ./claude-version.ts.
+ */
 export function getCliVersion(): string {
-    return process.env.ANTHROPIC_CLI_VERSION ?? CC_VERSION
+    return resolveClaudeCodeVersion().version
 }
 
 export function getEntrypoint(): string {
@@ -401,6 +409,11 @@ export function installClaudeCodeFetchPatch(): void {
                   : undefined
         applyClaudeCodeHeaderFidelity(headers, serializedBody)
         mergeCapturedBetas(headers)
+        // Re-assert the user-agent per request. The provider registration sets
+        // it once at extension load, so a Claude Code update mid-session would
+        // leave every later request claiming the old release while the billing
+        // header (built per request) claimed the new one.
+        headers.set("user-agent", buildUserAgent())
 
         if (serializedBody !== undefined) {
             const patched = patchClaudeCodeCch(serializedBody)

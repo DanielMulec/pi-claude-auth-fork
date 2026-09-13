@@ -34,9 +34,12 @@ test("injectBillingHeader: billing + Agent SDK identity, keeps extra system", ()
         cache_control?: unknown
     }>
     assert.equal(system.length, 3)
+    // Shape only: the version resolves from the Claude Code installed on this
+    // machine, so asserting a literal here would rot on every release. The
+    // version-specific vectors live in signing.test.ts.
     assert.match(
         system[0].text,
-        /^x-anthropic-billing-header: cc_version=2\.1\.267\.124; cc_entrypoint=sdk-cli; cch=00000; cc_prompt_id=[0-9a-f-]{36};$/,
+        /^x-anthropic-billing-header: cc_version=\d+\.\d+\.\d+\.[0-9a-f]{3}; cc_entrypoint=sdk-cli; cch=00000; cc_prompt_id=[0-9a-f-]{36};$/,
     )
     assert.equal(system[1].text, AGENT_SDK_IDENTITY)
     assert.equal(system[2].text, "Pi system")

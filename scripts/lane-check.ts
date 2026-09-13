@@ -1,15 +1,18 @@
 /**
- * Lane check: which billing lane does Anthropic route this request to?
+ * Billing check: which entitlement does Anthropic bill this request against?
  *
  * Sends two tiny requests with the same OAuth token and model:
  *   A) pi's built-in OAuth request shape (identity prompt, no billing header)
  *   B) full Claude Code shaping (billing header, current UA, full betas)
  *
- * Prints the rate-limit/billing-lane response headers for each. The lane is
- * visible in:
- *   - anthropic-ratelimit-unified-overage-*    -> extra-usage lane
- *   - anthropic-ratelimit-unified-5h/-7d-*     -> plan lane
+ * Prints the unified rate-limit response headers for each. The entitlement is
+ * visible in Anthropic's own headers:
+ *   - anthropic-ratelimit-unified-overage-*    -> extra usage
+ *   - anthropic-ratelimit-unified-5h/-7d-*     -> plan windows
  *   - HTTP 400 "Third-party apps now draw from your extra usage" -> blocked
+ *
+ * The file name, the `lane:check` npm script and the `LaneHeaders` type keep
+ * the older "lane" wording; everything printed here uses Anthropic's terms.
  *
  * Usage:
  *   pnpm run lane:check            # A/B on claude-sonnet-5
@@ -36,8 +39,10 @@ const PI_BETAS =
     "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14,interleaved-thinking-2025-05-14"
 const PI_UA = "claude-cli/2.1.251"
 
-// Claude Code 2.1.267 live-captured OAuth request shape (2026-09-10).
-// Both probe models are 1M-capable, so the 1M beta is part of the real shape.
+// Claude Code's live-captured OAuth request shape: the captured first-party
+// beta set plus the 1M beta (both probe models are 1M-capable) and the
+// Claude Code user-agent. The release version comes from `getCliVersion()`, so
+// this tracks the Claude Code installed on the machine under test.
 const CC_BETAS = (() => {
     const betas = CLAUDE_CODE_BETAS.split(",")
     const anchor = betas.indexOf("oauth-2025-04-20")
@@ -83,15 +88,15 @@ function extract(headers: Headers): LaneHeaders {
 function verdict(lane: LaneHeaders): string {
     const overage = Number(lane.overageUtilization ?? "0")
     if (overage > 0) {
-        return "⚠️  EXTRA-USAGE LANE (overage utilization > 0)"
+        return "⚠️  EXTRA USAGE BILLED (overage utilization > 0)"
     }
     if (lane.overageStatus === "blocked") {
-        return "⛔ BLOCKED from extra usage (and not on plan lane)"
+        return "⛔ BLOCKED from extra usage and not covered by the plan"
     }
     if (lane.h5Utilization || lane.h7Utilization) {
-        return "✅ PLAN LANE (5h/7d utilization consumed, overage burn 0.0)"
+        return "✅ PLAN WINDOWS (5h/7d utilization consumed, overage burn 0.0)"
     }
-    return "❓ no lane headers — inspect status/body"
+    return "❓ no unified rate-limit headers — inspect status/body"
 }
 
 async function send(

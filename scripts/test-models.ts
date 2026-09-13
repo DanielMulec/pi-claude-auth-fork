@@ -18,6 +18,7 @@ import {
     setActiveAccountSource,
 } from "../src/credentials.ts"
 import { readAllClaudeAccounts } from "../src/keychain.ts"
+import { getCliVersion } from "../src/signing.ts"
 
 // The supported model set. Keep this in sync with the README table.
 const MODELS = [
@@ -44,7 +45,6 @@ const MODELS = [
 const API_URL = "https://api.anthropic.com/v1/messages"
 const SYSTEM_IDENTITY =
     "You are Claude Code, Anthropic's official CLI for Claude."
-const CLI_VERSION = process.env.ANTHROPIC_CLI_VERSION ?? "2.1.267"
 
 const c = {
     green: (s: string) => `\x1b[32m${s}\x1b[0m`,
@@ -72,7 +72,7 @@ function buildHeaders(accessToken: string): Headers {
     )
     headers.set("anthropic-dangerous-direct-browser-access", "true")
     headers.set("x-app", "cli")
-    headers.set("user-agent", `claude-cli/${CLI_VERSION} (external, cli)`)
+    headers.set("user-agent", `claude-cli/${getCliVersion()} (external, cli)`)
     return headers
 }
 

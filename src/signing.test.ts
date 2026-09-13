@@ -6,7 +6,6 @@ import {
     buildUserAgent,
     CLAUDE_CODE_BETAS,
     CC_SDK_PACKAGE_VERSION,
-    CC_VERSION,
     computeVersionSuffix,
     extractFirstUserMessageText,
     LONG_CONTEXT_BETA,
@@ -68,6 +67,16 @@ test("computeVersionSuffix: live 2.1.267 captures", () => {
     assert.equal(
         computeVersionSuffix("explain the number seven briefly", "2.1.267"),
         "75d",
+    )
+})
+
+test("computeVersionSuffix: live 2.1.270 captures", () => {
+    // 2026-09-13 live captures against the 2.1.270 binary: the same prompt
+    // yields a different suffix because the version string is hashed with it.
+    assert.equal(computeVersionSuffix("say hi", "2.1.270"), "f7f")
+    assert.equal(
+        computeVersionSuffix("explain the number seven briefly", "2.1.270"),
+        "658",
     )
 })
 
@@ -248,11 +257,17 @@ test("buildBillingHeaderValue: 2.1.267 live shape", () => {
 
 test("buildUserAgent: default Claude Code form", () => {
     delete process.env.ANTHROPIC_USER_AGENT
-    delete process.env.ANTHROPIC_CLI_VERSION
     delete process.env.CLAUDE_CODE_ENTRYPOINT
+    // Injected so the assertion does not depend on which Claude Code release
+    // happens to be installed on the machine running the tests.
+    process.env.ANTHROPIC_CLI_VERSION = "2.1.267"
     assert.equal(buildUserAgent(), "claude-cli/2.1.267 (external, sdk-cli)")
 })
 
-test("CC_VERSION: pinned to live-captured Claude Code release", () => {
-    assert.equal(CC_VERSION, "2.1.267")
+test("buildUserAgent: version tracks ANTHROPIC_CLI_VERSION", () => {
+    delete process.env.ANTHROPIC_USER_AGENT
+    delete process.env.CLAUDE_CODE_ENTRYPOINT
+    process.env.ANTHROPIC_CLI_VERSION = "2.1.270"
+    assert.equal(buildUserAgent(), "claude-cli/2.1.270 (external, sdk-cli)")
+    assert.match(computeVersionSuffix("say hi", "2.1.270"), /^f7f$/)
 })
