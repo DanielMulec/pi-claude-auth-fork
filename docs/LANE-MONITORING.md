@@ -54,6 +54,18 @@ The script sends two tiny requests with the keychain OAuth token:
 - **B** — full Claude Code shape (billing header, real `cch`, the Claude Code
   user-agent at the installed release version, 13 betas)
 
+### What has actually been consumed
+
+The check above reports where a request was _routed_. What it cannot show is
+what the account has actually been charged — for that, Anthropic's own usage
+endpoint (the one Claude Code's `/usage` calls) is authoritative. It costs no
+tokens:
+
+```bash
+pnpm run usage            # plan windows + extra usage
+pnpm run usage -- --json  # raw payload, for diffing before/after
+```
+
 and prints the unified rate-limit response headers.
 
 ## Reading the output
@@ -159,9 +171,9 @@ features pi never exercises (mid-conversation tool changes, the advisor tool).
 - **After any Anthropic policy news** — watch support.claude.com 12429409 /
   15036540 and the code.claude.com changelog.
 - **Any time the billing question is live**, `pnpm run lane:check` is the ~5 s
-  empirical answer. `GET https://api.anthropic.com/api/oauth/usage` with the
-  OAuth token (what Claude Code's own `/usage` calls) reports plan windows and
-  `extra_usage.used_credits` directly, without spending tokens.
+  answer for routing, and `pnpm run usage` reports what has actually been
+  consumed (plan windows and `extra_usage.used_credits`) without spending
+  tokens. Both call Anthropic with the keychain OAuth token.
 
 ## When billing moves to extra usage
 

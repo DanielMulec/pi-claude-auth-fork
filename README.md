@@ -208,7 +208,19 @@ pi update npm:@pankajudhas81/pi-claude-auth
 ```
 
 See [docs/LANE-MONITORING.md](docs/LANE-MONITORING.md) for the billing
-check (`pnpm run lane:check`) and the re-check cadence.
+check (`pnpm run lane:check`), the consumed-usage report (`pnpm run usage`),
+and the re-check cadence.
+
+### Monitoring usage
+
+```bash
+pnpm run usage   # plan windows + extra usage, straight from Anthropic
+```
+
+Shows what the subscription plan has consumed (session, weekly, and
+model-scoped windows) and what has been drawn from extra usage credits — the
+accounting side of whether the Claude Code fingerprint is doing its job. Costs
+no tokens.
 
 ### Diagnostic logging
 
