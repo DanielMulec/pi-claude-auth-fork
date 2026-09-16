@@ -16,18 +16,19 @@
  *
  * Usage:
  *   pnpm run lane:check            # A/B on claude-sonnet-5
- *   pnpm run lane:check -- opus    # A/B on claude-opus-5
+ *   pnpm run lane:check opus       # A/B on claude-opus-5
+ *   pnpm run lane:check fable      # A/B on claude-fable-5-1
  */
 
 import { randomUUID } from "node:crypto"
 import { readAllClaudeAccounts } from "../src/keychain.ts"
 import {
+    applyClaudeCodeHeaderFidelity,
     buildBillingHeaderValue,
     buildUserAgent,
     CC_ENTRYPOINT,
-    CLAUDE_CODE_BETAS,
     getCliVersion,
-    LONG_CONTEXT_BETA,
+    mergeCapturedBetas,
     patchClaudeCodeCch,
 } from "../src/signing.ts"
 
@@ -39,20 +40,12 @@ const PI_BETAS =
     "claude-code-20250219,oauth-2025-04-20,fine-grained-tool-streaming-2025-05-14,interleaved-thinking-2025-05-14"
 const PI_UA = "claude-cli/2.1.251"
 
-// Claude Code's live-captured OAuth request shape: the captured first-party
-// beta set plus the 1M beta (both probe models are 1M-capable) and the
-// Claude Code user-agent. The release version comes from `getCliVersion()`, so
-// this tracks the Claude Code installed on the machine under test.
-const CC_BETAS = (() => {
-    const betas = CLAUDE_CODE_BETAS.split(",")
-    const anchor = betas.indexOf("oauth-2025-04-20")
-    betas.splice(anchor + 1, 0, LONG_CONTEXT_BETA)
-    return betas.join(",")
-})()
-
-const MODEL = process.argv.slice(2).includes("opus")
-    ? "claude-opus-5"
-    : "claude-sonnet-5"
+const args = new Set(process.argv.slice(2))
+const MODEL = args.has("fable")
+    ? "claude-fable-5-1"
+    : args.has("opus")
+      ? "claude-opus-5"
+      : "claude-sonnet-5"
 const USER_TEXT = "Reply with exactly: OK"
 
 interface LaneHeaders {
@@ -117,23 +110,6 @@ async function send(
     }
 
     const url = shape === "cc" ? `${API_URL}?beta=true` : API_URL
-    const headers: Record<string, string> = {
-        authorization: `Bearer ${token}`,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-        accept: "application/json",
-        "x-app": "cli",
-        "anthropic-dangerous-direct-browser-access": "true",
-    }
-    if (shape === "pi") {
-        headers["user-agent"] = PI_UA
-        headers["anthropic-beta"] = PI_BETAS
-    } else {
-        headers["user-agent"] = buildUserAgent()
-        headers["anthropic-beta"] = CC_BETAS
-        headers["x-claude-code-session-id"] = randomUUID()
-    }
-
     const body = {
         model: MODEL,
         max_tokens: 16,
@@ -141,12 +117,30 @@ async function send(
         messages: [{ role: "user", content: USER_TEXT }],
         stream: false,
     }
-    // The cc shape must carry a real cch, not the placeholder: 2.1.267 hashes
-    // the final body and Anthropic rejects unpatched placeholders on OAuth.
+    const serializedBody = JSON.stringify(body)
+    const headers = new Headers({
+        authorization: `Bearer ${token}`,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+        accept: "application/json",
+        "x-app": "cli",
+        "anthropic-dangerous-direct-browser-access": "true",
+    })
+    if (shape === "pi") {
+        headers.set("user-agent", PI_UA)
+        headers.set("anthropic-beta", PI_BETAS)
+    } else {
+        headers.set("user-agent", buildUserAgent())
+        headers.set("x-claude-code-session-id", randomUUID())
+        headers.set("x-client-request-id", randomUUID())
+        mergeCapturedBetas(headers, MODEL)
+        applyClaudeCodeHeaderFidelity(headers, serializedBody)
+    }
+
+    // The cc shape must carry a real cch, not the placeholder. The canonical
+    // shapers above keep this probe aligned with the extension's live traffic.
     const serialized =
-        shape === "cc"
-            ? patchClaudeCodeCch(JSON.stringify(body))
-            : JSON.stringify(body)
+        shape === "cc" ? patchClaudeCodeCch(serializedBody) : serializedBody
 
     try {
         const res = await fetch(url, {

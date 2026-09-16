@@ -1,5 +1,50 @@
 # Changelog
 
+# 0.7.0 (2026-09-16) — fork release
+
+### Changed
+
+- **Re-verified the complete request fingerprint against Claude Code 2.1.273.**
+  The billing-header builder, version suffix algorithm, `cch` seed/hash view,
+  `X-Stainless-*` identity, `?beta=true`, and request/session IDs are unchanged.
+  `FALLBACK_CC_VERSION` is now `2.1.273`; installed-version discovery remains
+  the normal path.
+- **Track the current common and model-gated beta fingerprint.** A remote gate
+  now makes both 2.1.270 and 2.1.273 emit `afk-mode-2026-01-31` for Fable 5.1,
+  Opus 5, and Sonnet 5. Model-specific additions are reproduced too:
+    - Fable 5.1: per-turn control, mid-conversation tool changes, server-side
+      fallback, and fallback credit
+    - Opus 5: mid-conversation tool changes and fallback credit
+    - Sonnet 5: no additional model-gated entries
+
+  Pi's own derived betas remain authoritative and additive, so its 1M-context
+  and per-message-effort features are preserved.
+- **Make `lane:check` use the production shaping functions** instead of its own
+  narrower static approximation. It now includes the Stainless headers,
+  client-request ID, current model-specific betas, and supports
+  `pnpm run lane:check fable`.
+
+### Verified
+
+- Three native loopback captures (Fable 5.1, Opus 5, Sonnet 5) reproduce their
+  2.1.273 `cch` values exactly under the unchanged seed
+  `0x4d659218e32a3268` (`57d14`, `8e558`, `eab20`). The version suffix is `e59`
+  for `Reply with exactly: OK` on all three.
+- Three end-to-end Pi loopback captures through this extension contain every
+  beta in the matching native request, plus only Pi's required feature betas;
+  their emitted `cch` values recompute exactly.
+- Live Pi requests through the extension on `claude-fable-5-1`,
+  `claude-opus-5`, and `claude-sonnet-5`: all HTTP 200,
+  `overage-utilization: 0.0`, plan-window utilization reported, and Anthropic's
+  usage endpoint showed no increase in extra-usage credits.
+- Official 2.1.271–2.1.273 changelog reviewed. The new 2.1.273
+  `x-claude-code-*` gateway hint headers are opt-in and absent from default
+  first-party OAuth traffic; the 2.1.271 `[1m]` resume fix is already covered
+  by per-request model gating. No other entry changes this fork's request path.
+- Real OAuth refresh returned HTTP 200, rotated both tokens, wrote them back to
+  macOS Keychain, and a follow-up usage query succeeded with the new token.
+- `pnpm test` 56/56 pass; `pnpm build`, `oxlint`, and `oxfmt --check` clean.
+
 # [0.6.0](https://github.com/pankajudhas81/pi-claude-auth/compare/v0.5.1...v0.6.0) (2026-09-13) — fork release
 
 ### Changed

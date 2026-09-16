@@ -12,7 +12,7 @@ undocumented classifier that has changed repeatedly (Apr 4, Apr 8, Jun 15 2026) 
 > keep the older "lane" wording; the script prints the messages you are reading
 > about.
 
-## Baseline (2026-09-10, re-verified 2026-09-13)
+## Baseline (2026-09-10, re-verified 2026-09-16)
 
 Account: Claude Pro, token from macOS Keychain (Claude Code OAuth session).
 Claude Code binary at baseline: **2.1.267** (build 2026-09-09T17:26:03Z, git `a9e1808c8204fef901336d54bac7d4ab442955cb`).
@@ -28,6 +28,12 @@ OAuth shape.
 [2.1.270 re-verification](#270-re-verification-2026-09-13). Same outcome:
 four probes (sonnet-5 and opus-5, pi shape and Claude Code shape), all HTTP 200,
 overage utilization `0.0`, 5h/7d at 1%.
+
+**Re-verified 2026-09-16 against Claude Code 2.1.273** — see
+[2.1.273 re-verification](#21273-re-verification-2026-09-16). Native and Pi
+loopback captures covered Fable 5.1, Opus 5, and Sonnet 5. Live Pi probes on all
+three returned HTTP 200 with overage utilization `0.0`; extra-usage credits did
+not increase.
 
 The release version is **not** pinned in code. `getCliVersion()` reads it from
 `~/.local/share/claude/versions` per request (see `src/claude-version.ts`), so
@@ -46,13 +52,14 @@ on-plan.
 cd pi-claude-auth-fork
 pnpm run lane:check        # A/B on claude-sonnet-5
 pnpm run lane:check opus   # A/B on claude-opus-5
+pnpm run lane:check fable  # A/B on claude-fable-5-1 (use sparingly)
 ```
 
 The script sends two tiny requests with the keychain OAuth token:
 
 - **A** — pi's built-in OAuth request shape (identity prompt, no billing header)
 - **B** — full Claude Code shape (billing header, real `cch`, the Claude Code
-  user-agent at the installed release version, 13 betas)
+  user-agent at the installed release version, and current model-specific betas)
 
 ### What has actually been consumed
 
@@ -156,9 +163,44 @@ The same 2.1.267 binary, run on 2026-09-13, emits the _same_ beta list as
   identical commands — a remotely-evaluated gate, i.e. noise. Not worth
   matching.
 
-The extension's beta handling is unchanged: pi's computed list stays
-authoritative and the captured set is appended. Both missing betas gate
-features pi never exercises (mid-conversation tool changes, the advisor tool).
+At v0.6.0 the extension deliberately left those model-gated entries unmatched
+because Pi did not exercise their features. The 2.1.273 review below tightens
+the fingerprint: the common set and current Fable/Opus model-specific entries
+are now merged while Pi's own computed list remains authoritative.
+
+## 2.1.273 re-verification (2026-09-16)
+
+Claude Code 2.1.273 (build 2026-09-15T17:06:32Z, git
+`d48ecfd7a41c16c42e0564f7a94947d6e4c50db1`). Three native loopback captures
+and three Pi-through-extension captures covered `claude-fable-5-1`,
+`claude-opus-5`, and `claude-sonnet-5`.
+
+**Unchanged:**
+
+- The billing-header builder and field order, version-suffix salt/algorithm,
+  `cch` seed/hash view, `X-Stainless-*` identity, `?beta=true`, and
+  request/session IDs.
+- Native `cch` values recompute exactly under seed `0x4d659218e32a3268`:
+  Fable 5.1 `57d14`, Opus 5 `8e558`, Sonnet 5 `eab20`.
+- `computeVersionSuffix("Reply with exactly: OK", "2.1.273")` reproduces the
+  native `e59` suffix for all three requests.
+
+**Beta gate change:** `afk-mode-2026-01-31` is now common to all three models.
+Fable 5.1 additionally emits per-turn control, mid-conversation tool changes,
+server-side fallback, and fallback credit; Opus 5 emits mid-conversation tool
+changes and fallback credit. The same installed 2.1.270 binary emits this set
+today, proving it is a remote-gate change rather than a 2.1.273 algorithm
+change. Pi's post-fix captures contain every matching native beta plus only its
+required 1M-context and per-message-effort betas.
+
+**Official changelog cross-check:** 2.1.272 contains only unspecified reliability
+fixes. The only 2.1.271–2.1.273 request-fingerprint item is five new
+`x-claude-code-*` gateway hint headers in 2.1.273. They are explicitly opt-in
+via `CLAUDE_CODE_GATEWAY_HINT_HEADERS=1`, apply to LLM gateway metadata, and
+were absent from default first-party captures, so this direct OAuth fork should
+not synthesize them. The 2.1.271 fix preserving `[1m]` on resumed sessions is
+already covered more strongly here: the fetch patch injects the 1M beta from
+the actual request model on every request.
 
 ## Re-check cadence
 
@@ -198,22 +240,15 @@ features pi never exercises (mid-conversation tool changes, the advisor tool).
 
 - **Auxiliary pi requests** (compaction/consolidation, background agents) do not
   pass through the extension's `before_provider_request` hook, so they carry no
-  billing header. They _do_ now get the Claude Code user-agent, the
-  `X-Stainless-*` headers and the merged beta set, because those are applied in
-  the fetch patch — which every OAuth request passes through. They would still
-  flip first if the classifier tightened.
-
-- **Auxiliary pi requests** (compaction/consolidation, background agents) do
-  not pass through the extension's `before_provider_request` hook and go
-  unshaped — the same gap exists in sibling extensions (gotgenes
-  pi-anthropic-auth). Today they still bill to the plan (baseline); they would
-  flip first if the classifier tightens.
+  billing header. They _do_ get the Claude Code user-agent, `X-Stainless-*`
+  headers, and merged beta set because every OAuth request passes through the
+  fetch patch. Today they still bill to the plan; they would flip first if the
+  classifier tightened.
 - `claude-fable-5` is metered to usage credits **even in genuine Claude Code**
   — no flat-rate route exists; avoid it if flat-rate billing is the goal.
 - On Pro, Opus 1M context may require usage credits (Max gets it by default).
-- `cch` nonce semantics are **partially** verified: the value now provably
-  matches what native Claude Code 2.1.267 computes over the same bytes, but
+- `cch` nonce semantics are **partially** verified: the value provably matches
+  what native Claude Code through 2.1.273 computes over the same bytes, but
   whether the server validates it (vs. merely logging it) is still unknown. If
-  the server ever _enforces_ a version-derived value, bumping the pin and seed
-  keeps the client side correct; if it enforces binary attestation, subprocess
-  mode becomes the only flat-rate route.
+  the server ever enforces a changed seed/hash view, this fork must track it; if
+  it enforces binary attestation, subprocess mode becomes the only plan route.

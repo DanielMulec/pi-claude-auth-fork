@@ -80,6 +80,15 @@ test("computeVersionSuffix: live 2.1.270 captures", () => {
     )
 })
 
+test("computeVersionSuffix: live 2.1.273 capture", () => {
+    // 2026-09-16: identical across native Fable 5.1, Opus 5 and Sonnet 5
+    // captures for this prompt.
+    assert.equal(
+        computeVersionSuffix("Reply with exactly: OK", "2.1.273"),
+        "e59",
+    )
+})
+
 test("xxHash64: standard vectors", () => {
     const enc = new TextEncoder()
     assert.equal(xxHash64(enc.encode("")).toString(16), "ef46db3751d8e999")
@@ -232,6 +241,43 @@ test("mergeCapturedBetas: sets the captured set when pi computed none", () => {
     mergeCapturedBetas(headers)
 
     assert.equal(headers.get("anthropic-beta"), CLAUDE_CODE_BETAS)
+})
+
+test("mergeCapturedBetas: 2.1.273 Sonnet 5 captured set", () => {
+    const headers = new Headers()
+
+    mergeCapturedBetas(headers, "claude-sonnet-5")
+
+    const betas = (headers.get("anthropic-beta") ?? "").split(",")
+    assert.ok(betas.includes("afk-mode-2026-01-31"))
+    assert.ok(!betas.includes("fallback-credit-2026-06-01"))
+})
+
+test("mergeCapturedBetas: 2.1.273 Opus 5 model betas", () => {
+    const headers = new Headers()
+
+    mergeCapturedBetas(headers, "claude-opus-5")
+
+    const betas = (headers.get("anthropic-beta") ?? "").split(",")
+    assert.ok(betas.includes("mid-conversation-tool-changes-2026-07-01"))
+    assert.ok(betas.includes("fallback-credit-2026-06-01"))
+    assert.ok(!betas.includes("per-turn-control-2026-07-01"))
+})
+
+test("mergeCapturedBetas: 2.1.273 Fable 5.1 model betas", () => {
+    const headers = new Headers()
+
+    mergeCapturedBetas(headers, "claude-fable-5-1")
+
+    const betas = (headers.get("anthropic-beta") ?? "").split(",")
+    for (const beta of [
+        "per-turn-control-2026-07-01",
+        "mid-conversation-tool-changes-2026-07-01",
+        "server-side-fallback-2026-06-01",
+        "fallback-credit-2026-06-01",
+    ]) {
+        assert.ok(betas.includes(beta), `missing Fable beta: ${beta}`)
+    }
 })
 
 test("supportsLongContextBeta: catalog windows", () => {

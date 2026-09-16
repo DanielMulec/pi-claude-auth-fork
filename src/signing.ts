@@ -41,9 +41,11 @@ export function supportsLongContextBeta(model: string | undefined): boolean {
     return typeof model === "string" && !CONTEXT_200K_MODEL.test(model)
 }
 
-// Claude Code 2.1.267 first-party default beta set, in wire order, minus the
-// model-gated 1M beta. Live-captured 2026-09-10 on claude-opus-5; unchanged
-// from 2.1.266.
+// Claude Code's 2.1.273 first-party beta set shared by Fable 5.1, Opus 5 and
+// Sonnet 5, in wire order, minus the model-gated 1M beta. Live-captured
+// 2026-09-16. `afk-mode` was remotely activated after the 2.1.270 baseline;
+// the same 2.1.270 binary now emits it, so this is gate drift rather than a
+// release-specific algorithm change.
 //
 // This is merged into pi's computed beta list (see `mergeCapturedBetas`), never
 // asserted as a replacement. pi-ai treats a configured `anthropic-beta` header
@@ -61,10 +63,15 @@ export const CLAUDE_CODE_BETAS = [
     "mid-conversation-system-2026-04-07",
     "advanced-tool-use-2025-11-20",
     "effort-2025-11-24",
-    "fallback-credit-2026-06-01",
+    "afk-mode-2026-01-31",
     "extended-cache-ttl-2025-04-11",
     "cache-diagnosis-2026-04-07",
 ].join(",")
+
+const MID_CONVERSATION_TOOL_CHANGE_MODEL =
+    /^claude-(?:fable-5(?:-1)?|opus-(?:4-8|5))(?:-|$)/
+const FALLBACK_CREDIT_MODEL = MID_CONVERSATION_TOOL_CHANGE_MODEL
+const FABLE_5_1_MODEL = /^claude-fable-5-1(?:-|$)/
 
 /**
  * The Claude Code release this request claims to be.
@@ -324,16 +331,43 @@ function modelFromSerializedBody(serialized: string): string | undefined {
  * authoritative for feature betas, so betas for future pi features cannot be
  * dropped by this extension.
  */
-export function mergeCapturedBetas(headers: Headers): void {
+export function mergeCapturedBetas(headers: Headers, model?: string): void {
     const current = headers.get("anthropic-beta")
     const betas = (current ?? "")
         .split(",")
         .map((entry) => entry.trim())
         .filter((entry) => entry.length > 0)
-    for (const beta of CLAUDE_CODE_BETAS.split(",")) {
+    for (const beta of capturedBetasForModel(model)) {
         if (!betas.includes(beta)) betas.push(beta)
     }
     headers.set("anthropic-beta", betas.join(","))
+}
+
+/** Current live-captured Claude Code betas, including model-gated entries. */
+function capturedBetasForModel(model: string | undefined): string[] {
+    const betas = CLAUDE_CODE_BETAS.split(",")
+    if (!model) return betas
+
+    const afterSystem = betas.indexOf("mid-conversation-system-2026-04-07") + 1
+    const systemBetas: string[] = []
+    if (FABLE_5_1_MODEL.test(model)) {
+        systemBetas.push("per-turn-control-2026-07-01")
+    }
+    if (MID_CONVERSATION_TOOL_CHANGE_MODEL.test(model)) {
+        systemBetas.push("mid-conversation-tool-changes-2026-07-01")
+    }
+    betas.splice(afterSystem, 0, ...systemBetas)
+
+    const afterEffort = betas.indexOf("effort-2025-11-24") + 1
+    const fallbackBetas: string[] = []
+    if (FABLE_5_1_MODEL.test(model)) {
+        fallbackBetas.push("server-side-fallback-2026-06-01")
+    }
+    if (FALLBACK_CREDIT_MODEL.test(model)) {
+        fallbackBetas.push("fallback-credit-2026-06-01")
+    }
+    betas.splice(afterEffort, 0, ...fallbackBetas)
+    return betas
 }
 
 function insertBeta(headers: Headers, beta: string): void {
@@ -408,7 +442,12 @@ export function installClaudeCodeFetchPatch(): void {
                   ? await input.clone().text()
                   : undefined
         applyClaudeCodeHeaderFidelity(headers, serializedBody)
-        mergeCapturedBetas(headers)
+        mergeCapturedBetas(
+            headers,
+            serializedBody === undefined
+                ? undefined
+                : modelFromSerializedBody(serializedBody),
+        )
         // Re-assert the user-agent per request. The provider registration sets
         // it once at extension load, so a Claude Code update mid-session would
         // leave every later request claiming the old release while the billing
