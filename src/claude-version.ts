@@ -12,7 +12,7 @@ import { log } from "./logger.ts"
  * still emit a well-formed billing header instead of failing outright. Using it
  * costs accuracy, so it is announced on stderr the first time.
  */
-export const FALLBACK_CC_VERSION = "2.1.273"
+export const FALLBACK_CC_VERSION = "2.1.274"
 
 /** Claude Code release directories are named bare `x.y.z`. */
 const RELEASE_NAME = /^\d+\.\d+\.\d+$/u

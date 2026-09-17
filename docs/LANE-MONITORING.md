@@ -12,7 +12,7 @@ undocumented classifier that has changed repeatedly (Apr 4, Apr 8, Jun 15 2026) 
 > keep the older "lane" wording; the script prints the messages you are reading
 > about.
 
-## Baseline (2026-09-10, re-verified 2026-09-16)
+## Baseline (2026-09-10, re-verified 2026-09-17)
 
 Account: Claude Pro, token from macOS Keychain (Claude Code OAuth session).
 Claude Code binary at baseline: **2.1.267** (build 2026-09-09T17:26:03Z, git `a9e1808c8204fef901336d54bac7d4ab442955cb`).
@@ -34,6 +34,12 @@ overage utilization `0.0`, 5h/7d at 1%.
 loopback captures covered Fable 5.1, Opus 5, and Sonnet 5. Live Pi probes on all
 three returned HTTP 200 with overage utilization `0.0`; extra-usage credits did
 not increase.
+
+**Re-verified 2026-09-17 against Claude Code 2.1.274** — see
+[2.1.274 re-verification](#21274-re-verification-2026-09-17). The full
+fingerprint is unchanged apart from the release version and its derived suffix.
+Live Pi probes on all three models returned HTTP 200 with overage utilization
+`0.0`; extra-usage credits did not increase.
 
 The release version is **not** pinned in code. `getCliVersion()` reads it from
 `~/.local/share/claude/versions` per request (see `src/claude-version.ts`), so
@@ -201,6 +207,34 @@ were absent from default first-party captures, so this direct OAuth fork should
 not synthesize them. The 2.1.271 fix preserving `[1m]` on resumed sessions is
 already covered more strongly here: the fetch patch injects the 1M beta from
 the actual request model on every request.
+
+## 2.1.274 re-verification (2026-09-17)
+
+Claude Code 2.1.274 (build 2026-09-16T21:39:42Z, git
+`1efcc1361e649ab98800b43a7df307043397a9ba`). Native and Pi loopback captures
+again covered Fable 5.1, Opus 5, and Sonnet 5, with fresh 2.1.273 captures as the
+differential control.
+
+- Native beta sets and top-level body keys are identical between 2.1.273 and
+  2.1.274 for all three models.
+- Billing-header layout, suffix salt/algorithm, CCH hash view/seed,
+  `X-Stainless-*` identity, `?beta=true`, and request/session IDs are unchanged.
+- Native CCH values reproduce exactly: Fable 5.1 `3cf31`, Opus 5 `2c9b4`,
+  Sonnet 5 `03989`. The common version suffix for
+  `Reply with exactly: OK` is `9be`.
+- Pi already reports `claude-cli/2.1.274` and `cc_version=2.1.274.9be` through
+  installed-version discovery. Every native beta is present, Pi retains only
+  its required feature betas, and Pi CCH values (`19880`, `4dead`, `521bf`)
+  recompute exactly.
+- The official 2.1.274 changelog contains no direct first-party OAuth
+  fingerprint change. The closest entries concern OTel request tracing and raw
+  API-body diagnostics, neither of which changes wire requests.
+- Live Pi requests on all three models returned HTTP 200,
+  `overage-utilization: 0.0`, and unchanged extra-usage credits; the account's
+  usage breakdown remained 100% Claude Code.
+
+No production request-shaping change was needed. Only the no-install fallback,
+version-specific test vector, and verification record advanced to 2.1.274.
 
 ## Re-check cadence
 

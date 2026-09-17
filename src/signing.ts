@@ -41,9 +41,9 @@ export function supportsLongContextBeta(model: string | undefined): boolean {
     return typeof model === "string" && !CONTEXT_200K_MODEL.test(model)
 }
 
-// Claude Code's 2.1.273 first-party beta set shared by Fable 5.1, Opus 5 and
+// Claude Code's 2.1.274 first-party beta set shared by Fable 5.1, Opus 5 and
 // Sonnet 5, in wire order, minus the model-gated 1M beta. Live-captured
-// 2026-09-16. `afk-mode` was remotely activated after the 2.1.270 baseline;
+// 2026-09-17. `afk-mode` was remotely activated after the 2.1.270 baseline;
 // the same 2.1.270 binary now emits it, so this is gate drift rather than a
 // release-specific algorithm change.
 //

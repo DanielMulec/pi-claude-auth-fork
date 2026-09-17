@@ -1,5 +1,32 @@
 # Changelog
 
+# 0.7.1 (2026-09-17) — fork release
+
+### Changed
+
+- Re-verified Claude Code 2.1.274 and advanced the no-install fallback from
+  `2.1.273` to `2.1.274`. Normal requests already reported 2.1.274 immediately
+  through installed-version discovery; no production request shaper changed.
+- Added the live 2.1.274 version-suffix vector (`Reply with exactly: OK` →
+  `9be`) and updated the fingerprint record.
+
+### Verified
+
+- Official 2.1.274 changelog reviewed. Its changes concern memory warnings,
+  MCP behavior, telemetry, gateways, UI, agents, and reliability; none changes
+  the direct first-party OAuth request fingerprint.
+- Native Fable 5.1, Opus 5, and Sonnet 5 loopback captures match 2.1.273 in
+  beta sets, body keys, billing-header layout, CCH hash view/seed, and Stainless
+  identity. Their native 2.1.274 CCH values (`3cf31`, `2c9b4`, `03989`) and
+  `9be` suffix all reproduce exactly.
+- Pi-through-extension loopback captures report 2.1.274 automatically, contain
+  every matching native beta plus only Pi's required feature betas, and their
+  CCH values (`19880`, `4dead`, `521bf`) recompute exactly.
+- Live Pi requests on Fable 5.1, Opus 5, and Sonnet 5 all returned HTTP 200 with
+  `overage-utilization: 0.0`; extra-usage credits remained unchanged and the
+  usage breakdown remained 100% Claude Code.
+- `pnpm test` 57/57 pass; `pnpm build`, `oxlint`, and `oxfmt --check` clean.
+
 # 0.7.0 (2026-09-16) — fork release
 
 ### Changed

@@ -89,6 +89,15 @@ test("computeVersionSuffix: live 2.1.273 capture", () => {
     )
 })
 
+test("computeVersionSuffix: live 2.1.274 capture", () => {
+    // 2026-09-17: identical across native Fable 5.1, Opus 5 and Sonnet 5
+    // captures for this prompt.
+    assert.equal(
+        computeVersionSuffix("Reply with exactly: OK", "2.1.274"),
+        "9be",
+    )
+})
+
 test("xxHash64: standard vectors", () => {
     const enc = new TextEncoder()
     assert.equal(xxHash64(enc.encode("")).toString(16), "ef46db3751d8e999")

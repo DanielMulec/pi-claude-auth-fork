@@ -1,11 +1,11 @@
 # pi-claude-auth
 
-> **Fork status (v0.7.0):** maintained fork of upstream `pi-claude-auth@0.1.3` (last upstream release 2026-06-04).
+> **Fork status (v0.7.1):** maintained fork of upstream `pi-claude-auth@0.1.3` (last upstream release 2026-06-04).
 > Changes vs upstream:
 >
 > - **Claude Code version is read from the installation, not pinned** — the release number is resolved from `~/.local/share/claude/versions` on every request, so a Claude Code update needs no change here. `ANTHROPIC_CLI_VERSION` remains a manual override, and a constant covers machines with no Claude Code installed (announced on stderr when used)
-> - **`cch` verified against live Claude Code 2.1.267, 2.1.270, and 2.1.273** — the recovered seed (`4d659218e32a3268`) plus Claude Code's hash view (empty `model`, dropped `max_tokens`/`fallbacks`/`fallback_credit_token`) reproduces native `cch` on live captures
-> - **The current beta fingerprint is merged into pi's, never substituted for it** — the 2.1.273 capture separates the common set from Fable 5.1 / Opus 5 model-gated betas, while preserving every beta pi derives from model compatibility flags
+> - **`cch` verified through live Claude Code 2.1.274** — the recovered seed (`4d659218e32a3268`) plus Claude Code's hash view (empty `model`, dropped `max_tokens`/`fallbacks`/`fallback_credit_token`) reproduces native `cch` on live captures
+> - **The current beta fingerprint is merged into pi's, never substituted for it** — the 2.1.274 capture confirms the common set and Fable 5.1 / Opus 5 model-gated betas, while preserving every beta pi derives from model compatibility flags
 > - **pi ≥ 0.83 compatibility**: `ModelRegistry.authStorage` (removed in 0.83) is now feature-detected; auth.json seeding + `/login` cover the current session
 > - **New models added to the smoke-test list**: `claude-sonnet-5`, `claude-opus-5`
 
