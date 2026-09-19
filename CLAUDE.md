@@ -6,6 +6,7 @@ Source of truth for this repo: commit `3df2adb` — **v0.7.1**, Claude Code **2.
 - Move git refs (pull, fast-forward, merge, rebase, reset, push) only when the user asks.
 - Explore alternate history, extra refs, or paths outside this repo only when the user names a specific ref or path.
 - Claude OAuth contingency: read `docs/CLAUDE-OAUTH-CONTINGENCY.md` before changing request identity/prompt shaping, or diagnosing third-party / extra-usage routing.
+- Active handoff (2.1.278 sdk-cli upgrade): read `docs/HANDOFF-2.1.278-SDK-CLI.md` before fingerprint/version work on the current production path.
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
