@@ -1,5 +1,90 @@
 # Changelog
 
+# 0.8.0 (2026-09-19) — fork release
+
+### Changed
+
+- **Pi now presents the *interactive* Claude Code CLI, not the Agent SDK.** The
+  entrypoint was hardcoded to `sdk-cli`, which is what `claude --print` and the
+  Agent SDK send — so every request said "I am the SDK" while the billing header,
+  the identity prompt and the user-agent all disagreed with each other about it.
+  Claude Code itself does not hardcode this value: it reads
+  `CLAUDE_CODE_ENTRYPOINT` (2.1.277 bundle, `process.env.CLAUDE_CODE_ENTRYPOINT
+  ?? "unknown"`) and its launchers set `cli` for the TUI and `sdk-cli` for
+  `--print`. This fork now claims `cli`.
+- **The identity block is the CLI's, not the SDK's.** `system[1]` is now
+  `You are Claude Code, Anthropic's official CLI for Claude.` Claude Code's
+  `ybn` picks between three identity lines by launch mode; the interactive one is
+  the match for `cc_entrypoint=cli`. The SDK line is still recognised (and
+  stripped) when re-shaping a payload.
+- **`cc_turn_origin=human`** on the billing header, matching live interactive
+  captures (`--print` sends `sdk` there).
+- **`cc_prev_req`** on every request after the first: the previous response's
+  `request-id`, replayed exactly as native does, and only when it matches
+  Claude Code's own `^req_[A-Za-z0-9_-]{1,36}$` gate.
+- **`x-claude-code-request-class: main`** on every OAuth request.
+- **`x-cc-atis`** — Claude Code's cached client-data pin, read from
+  `~/.claude.json`'s `clientDataCacheSlots` under the key
+  `bi1-<sha256(JSON.stringify([entrypoint, model, version, org]))[:16]>`
+  (recovered from the bundle's `fRn` and confirmed against live captures). Exact
+  slot first, then native's own "newest stale slot for the same entrypoint,
+  model and org" fallback; if neither exists no header is sent, which is what
+  native does for a slot it has never fetched.
+- **The 2.1.277 beta fingerprint.** `advisor-tool-2026-03-01`,
+  `thinking-binding-controls-2026-08-01` and
+  `thinking-display-updates-2026-08-18` joined the captured set.
+  `redact-thinking-2026-02-12` and `structured-outputs-2025-12-15` are
+  deliberately **not** sent: live captures show native strips both from the
+  interactive main request, keeping them only on `sdk-cli` and auxiliary
+  traffic.
+- **`thinking-display-updates-2026-08-18` follows `thinking.display`.** Native
+  sends that beta together with `thinking.display: "updates"`; pi asks for
+  `"summarized"`, so it does not claim the beta. The bit is now a property of the
+  request, not of the model.
+- **The `server-side-fallback` / `fallback-credit` betas are gone.** The 2.1.277
+  bundle emits them from the same function that returns the `fallbacks` body
+  field, and interactive main captures carried neither. Pi's `fallbacks` is
+  stripped for OAuth anyway, so the betas followed it out.
+- **`cch` now empties every `model` string, at any depth.** Native's hash view
+  does; a 2.1.277 Opus or Fable request repeats the model id inside the `advisor`
+  tool, and a top-level-only transform reproduced cch for Sonnet and Haiku but
+  missed Opus and Fable on every live capture. `fallbacks` is *kept* in the view
+  (native hashes its own), while `max_tokens` and `fallback_credit_token` are
+  still dropped.
+- **`FALLBACK_CC_VERSION` is `2.1.278`.** The no-install fallback, not a
+  pin: the version is normally read from `~/.local/share/claude/versions`.
+- **The capture rig is now in the repo.** `pnpm run capture` runs the loopback
+  server, `scripts/drive-claude-interactive.py` drives the real TUI in a pty
+  (the only way to reach the `cli` shape), `scripts/pi-capture-redirect.ts` dumps
+  pi's shaped request, and `pnpm run verify:fingerprint` re-checks any of them.
+  `docs/LANE-MONITORING.md` no longer refers to a rig that was never committed.
+
+### Verified
+
+- 23 live Claude Code 2.1.277 loopback captures (interactive and `--print`,
+  Fable 5.1 / Opus 5 / Sonnet 5 / Haiku, auxiliary and main) all reproduce their
+  native `cch` under the unchanged seed `0x4d659218e32a3268`; the version suffix
+  for `Reply with exactly: OK` is `b25` and reproduces exactly. Every captured
+  native beta for a main interactive request is present in the fork's set with no
+  extras beyond pi's own feature betas.
+- Pi-through-extension captures on `claude-opus-5` and `claude-sonnet-5` match
+  native on `cc_version`, `cc_entrypoint`, `cc_turn_origin`, `cc_prev_req` (turn
+  2), user-agent, `x-app`, `x-claude-code-request-class`, `x-stainless-*`, the
+  beta set and `metadata.user_id`, and their `cch` recomputes.
+- Live pi requests on `claude-sonnet-5` and `claude-opus-5` returned HTTP 200;
+  `pnpm run lane:check` reported overage utilization `0.0` for both the pi and
+  the Claude Code shape, and `pnpm run usage` showed extra-usage credits
+  unchanged at 81.00 EUR.
+- **Claude Code updated itself to 2.1.278 during the merge and needed no code
+  change.** The rig re-ran against it: native `cch` `cf42b` and `b0f1a`
+  recompute exactly, the suffix for `Reply with exactly: OK` is `773` and
+  reproduces, the beta set is identical to 2.1.277 with no missing or extra
+  entries, and the fork claimed `2.1.278` automatically because the version is
+  read per request. Live pi requests on `claude-sonnet-5` and `claude-opus-5`
+  returned HTTP 200 with overage utilization `0.0` and extra-usage credits
+  unchanged. Only the no-install fallback advanced, to `2.1.278`.
+- `pnpm test` 69/69 pass; `tsc`, `oxlint` and `oxfmt --check` clean.
+
 # 0.7.1 (2026-09-17) — fork release
 
 ### Changed

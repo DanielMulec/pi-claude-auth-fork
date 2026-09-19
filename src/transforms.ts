@@ -6,6 +6,7 @@ import {
     buildBillingHeaderValue,
     getCliVersion,
     getEntrypoint,
+    LEGACY_CLI_AGENT_SDK_IDENTITY,
     LEGACY_CLI_IDENTITY,
 } from "./signing.ts"
 
@@ -81,8 +82,17 @@ export function discoverClaudeCodeIdentity(): ClaudeCodeIdentity | undefined {
 }
 
 /**
- * Shape an Anthropic OAuth payload like live Claude Code 2.1.267:
- * system[0] billing header, system[1] Agent SDK identity, then Pi's prompt.
+ * Shape an Anthropic OAuth payload like live interactive Claude Code 2.1.277:
+ * system[0] billing header, system[1] CLI identity, then Pi's prompt.
+ *
+ * The identity line is the one native sends for `cc_entrypoint=cli`. Claude Code
+ * picks between three depending on how it was launched (`ybn` in the 2.1.277
+ * bundle): the interactive CLI gets
+ * "You are Claude Code, Anthropic's official CLI for Claude.", while `--print`
+ * and the Agent SDK get the "built on Anthropic's Claude Agent SDK" variants.
+ * Because pi claims the interactive entrypoint, it has to carry the interactive
+ * identity too — this fork used to emit the Agent SDK line, which contradicted
+ * the rest of its own fingerprint.
  */
 export function injectBillingHeader(
     payload: unknown,
@@ -103,6 +113,7 @@ export function injectBillingHeader(
         const text = entryText(e)
         return (
             text.startsWith(LEGACY_CLI_IDENTITY) ||
+            text.startsWith(LEGACY_CLI_AGENT_SDK_IDENTITY) ||
             text.startsWith(AGENT_SDK_IDENTITY) ||
             text.startsWith(BILLING_PREFIX)
         )
@@ -114,6 +125,7 @@ export function injectBillingHeader(
         return (
             !text.startsWith(BILLING_PREFIX) &&
             !text.startsWith(LEGACY_CLI_IDENTITY) &&
+            !text.startsWith(LEGACY_CLI_AGENT_SDK_IDENTITY) &&
             !text.startsWith(AGENT_SDK_IDENTITY)
         )
     })
@@ -129,7 +141,7 @@ export function injectBillingHeader(
 
     p.system = [
         { type: "text", text: billingHeader },
-        { type: "text", text: AGENT_SDK_IDENTITY },
+        { type: "text", text: LEGACY_CLI_IDENTITY },
         ...remaining,
     ]
 

@@ -1,11 +1,13 @@
 # pi-claude-auth
 
-> **Fork status (v0.7.1):** maintained fork of upstream `pi-claude-auth@0.1.3` (last upstream release 2026-06-04).
+> **Fork status (v0.8.0):** maintained fork of upstream `pi-claude-auth@0.1.3` (last upstream release 2026-06-04).
 > Changes vs upstream:
 >
+> - **The fingerprint is the _interactive_ Claude Code CLI, not the Agent SDK** — `cc_entrypoint=cli`, the CLI identity prompt, `cc_turn_origin=human`, `cc_prev_req`, `x-claude-code-request-class`, and Claude Code's cached `x-cc-atis` pin. Claude Code reads its entrypoint from `CLAUDE_CODE_ENTRYPOINT`, so `sdk-cli` (what `--print` and the Agent SDK send) was a self-inflicted tell rather than a requirement
 > - **Claude Code version is read from the installation, not pinned** — the release number is resolved from `~/.local/share/claude/versions` on every request, so a Claude Code update needs no change here. `ANTHROPIC_CLI_VERSION` remains a manual override, and a constant covers machines with no Claude Code installed (announced on stderr when used)
-> - **`cch` verified through live Claude Code 2.1.274** — the recovered seed (`4d659218e32a3268`) plus Claude Code's hash view (empty `model`, dropped `max_tokens`/`fallbacks`/`fallback_credit_token`) reproduces native `cch` on live captures
-> - **The current beta fingerprint is merged into pi's, never substituted for it** — the 2.1.274 capture confirms the common set and Fable 5.1 / Opus 5 model-gated betas, while preserving every beta pi derives from model compatibility flags
+> - **`cch` verified through live Claude Code 2.1.277** — the recovered seed (`4d659218e32a3268`) plus Claude Code's hash view (every `model` string emptied at any depth, dropped `max_tokens`/`fallback_credit_token`) reproduces native `cch` on 23 live captures. The recursive `model` emptying is what makes Opus and Fable reproduce: they repeat the model id inside the `advisor` tool
+> - **The current beta fingerprint is merged into pi's, never substituted for it** — the 2.1.277 capture confirms the common set and Fable 5.1 / Opus 5 model-gated betas, while preserving every beta pi derives from model compatibility flags
+> - **A capture rig and an offline fingerprint checker ship with the repo** (`pnpm run capture`, `pnpm run verify:fingerprint`) so the next Claude Code update can be verified against real traffic instead of probe-and-hope
 > - **pi ≥ 0.83 compatibility**: `ModelRegistry.authStorage` (removed in 0.83) is now feature-detected; auth.json seeding + `/login` cover the current session
 > - **New models added to the smoke-test list**: `claude-sonnet-5`, `claude-opus-5`
 
@@ -262,12 +264,15 @@ write-back is enabled by default to keep your stored credentials valid.
 
 ## Environment variables
 
-| Variable                | Description                                                                 | Default            |
-| ----------------------- | --------------------------------------------------------------------------- | ------------------ |
-| `PI_CODING_AGENT_DIR`   | pi's config directory (where `auth.json` lives)                             | `~/.pi/agent`      |
-| `PI_CLAUDE_AUTH_DEBUG`  | Enable diagnostic logging (`1` for default path, or a custom file path)     | disabled           |
-| `ANTHROPIC_CLI_VERSION` | Claude CLI version for billing headers (default: the installed Claude Code) | —                  |
-| `ANTHROPIC_CCH_SEED`    | 64-bit hex seed for structure-aware `cch` (native seed rotates)             | `4d659218e32a3268` |
+| Variable                 | Description                                                                                                                            | Default            |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| `PI_CODING_AGENT_DIR`    | pi's config directory (where `auth.json` lives)                                                                                        | `~/.pi/agent`      |
+| `PI_CLAUDE_AUTH_DEBUG`   | Enable diagnostic logging (`1` for default path, or a custom file path)                                                                | disabled           |
+| `ANTHROPIC_CLI_VERSION`  | Claude CLI version for billing headers (default: the installed Claude Code)                                                            | —                  |
+| `ANTHROPIC_CCH_SEED`     | 64-bit hex seed for structure-aware `cch` (native seed rotates)                                                                        | `4d659218e32a3268` |
+| `CLAUDE_CODE_ENTRYPOINT` | Entrypoint this extension claims. Claude Code reads the same variable; its launchers set `cli` for the TUI and `sdk-cli` for `--print` | `cli`              |
+| `ANTHROPIC_USER_AGENT`   | Full user-agent override, bypassing the assembled Claude Code form                                                                     | —                  |
+| `CLAUDE_CONFIG_DIR`      | Where `.claude.json` lives, for the `x-cc-atis` client-data lookup                                                                     | `~`                |
 
 ## How it works
 
@@ -308,14 +313,58 @@ request fidelity (identity, beta flags, tool naming) for OAuth tokens.
 - Re-syncs `auth.json` every 5 minutes (sync never triggers a refresh; refresh
   is lazy, only when pi requests it or a request needs a fresh token)
 - pi's built-in Anthropic provider applies the Claude Code identity, beta flags,
-  and tool-name conventions for OAuth tokens, so requests look like Claude Code
+  and tool-name conventions for OAuth tokens; this extension supplies the parts
+  pi does not know about
 - The captured Claude Code first-party beta set is **merged into** pi's computed
   list at fetch time (`mergeCapturedBetas`) rather than declared as provider
   metadata. pi-ai treats a configured `anthropic-beta` header as a full
   replacement, so declaring the list here would drop the betas pi derives from a
   model's compat flags — the merge is strictly additive
+- A global `fetch` patch shapes every OAuth request at the last moment, when the
+  body is final: it recomputes `cch` over Claude Code's hash view, re-asserts the
+  user-agent per request (so a mid-session Claude Code update is picked up), sets
+  the `X-Stainless-*` identity, the request class and the cached `x-cc-atis` pin,
+  and merges the captured betas
 - If credentials aren't OAuth-based or can't be read, the extension disables
   itself and pi continues with its standard Anthropic auth
+
+## Verifying the fingerprint
+
+The fork reproduces an undocumented client fingerprint, so it is verified against
+real traffic rather than assumed. Both halves of the rig ship with the repo:
+
+```bash
+# 1. Loopback capture server — nothing reaches Anthropic
+pnpm run capture -- --port 8899 --out /tmp/cc-capture
+
+# 2. Drive the real interactive TUI (pty required; Python 3)
+ANTHROPIC_BASE_URL=http://127.0.0.1:8899 \
+_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL=1 \
+    python3 scripts/drive-claude-interactive.py --model claude-sonnet-5 --turns 2
+
+# 3. Re-check what was captured
+pnpm run verify:fingerprint /tmp/cc-capture --prompt "Reply with exactly: OK"
+```
+
+Step 2 is the part that matters. `claude -p` is _not_ a substitute: `--print`
+sends `cc_entrypoint=sdk-cli`, the Agent SDK identity line, and
+`cc_turn_origin=sdk`. Only the TUI sends the interactive shape this fork
+reproduces, and reaching the TUI needs a pty.
+
+To capture pi's side through the same server:
+
+```bash
+CCFP_DIR=/tmp/cc-capture/pi pnpm run capture -- --port 8899 --out /tmp/cc-capture &
+CCFP_DIR=/tmp/cc-capture/pi pi \
+    --extension scripts/pi-capture-redirect.ts --extension src/index.ts \
+    -ne -np -ns --print --model claude-opus-5 "Reply with exactly: OK"
+```
+
+The redirect extension must load **before** this one so the fetch patch wraps it
+and the dump shows the shaped body. Verify both sides with the same command.
+
+See [docs/LANE-MONITORING.md](docs/LANE-MONITORING.md) for what has been
+verified release by release.
 
 ## Acknowledgements
 

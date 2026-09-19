@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { AGENT_SDK_IDENTITY, LEGACY_CLI_IDENTITY } from "./signing.ts"
+import { LEGACY_CLI_IDENTITY } from "./signing.ts"
 import { injectBillingHeader, parseClaudeCodeIdentity } from "./transforms.ts"
 
 function claudePayload() {
@@ -11,7 +11,7 @@ function claudePayload() {
     }
 }
 
-test("injectBillingHeader: billing + Agent SDK identity, keeps extra system", () => {
+test("injectBillingHeader: billing + interactive CLI identity, keeps extra system", () => {
     const payload = {
         model: "claude-sonnet-4-6",
         system: [
@@ -39,9 +39,9 @@ test("injectBillingHeader: billing + Agent SDK identity, keeps extra system", ()
     // version-specific vectors live in signing.test.ts.
     assert.match(
         system[0].text,
-        /^x-anthropic-billing-header: cc_version=\d+\.\d+\.\d+\.[0-9a-f]{3}; cc_entrypoint=sdk-cli; cch=00000; cc_prompt_id=[0-9a-f-]{36};$/,
+        /^x-anthropic-billing-header: cc_version=\d+\.\d+\.\d+\.[0-9a-f]{3}; cc_entrypoint=cli; cch=00000; cc_prompt_id=[0-9a-f-]{36}; cc_turn_origin=human;$/,
     )
-    assert.equal(system[1].text, AGENT_SDK_IDENTITY)
+    assert.equal(system[1].text, LEGACY_CLI_IDENTITY)
     assert.equal(system[2].text, "Pi system")
     assert.deepEqual(system[2].cache_control, { type: "ephemeral" })
     assert.deepEqual(out.metadata, {
@@ -86,7 +86,7 @@ test("injectBillingHeader: idempotent", () => {
             .length,
         1,
     )
-    assert.equal(system.filter((e) => e.text === AGENT_SDK_IDENTITY).length, 1)
+    assert.equal(system.filter((e) => e.text === LEGACY_CLI_IDENTITY).length, 1)
 })
 
 test("parseClaudeCodeIdentity: rejects bad ids", () => {

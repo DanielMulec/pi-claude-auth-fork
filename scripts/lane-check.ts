@@ -30,6 +30,7 @@ import {
     getCliVersion,
     mergeCapturedBetas,
     patchClaudeCodeCch,
+    THINKING_DISPLAY_UPDATES,
 } from "../src/signing.ts"
 
 const API_URL = "https://api.anthropic.com/v1/messages"
@@ -133,7 +134,13 @@ async function send(
         headers.set("user-agent", buildUserAgent())
         headers.set("x-claude-code-session-id", randomUUID())
         headers.set("x-client-request-id", randomUUID())
-        mergeCapturedBetas(headers, MODEL)
+        mergeCapturedBetas(headers, {
+            model: MODEL,
+            // The probe reproduces Claude Code's header set, not pi's body. On
+            // live traffic native pairs this beta with `thinking.display:
+            // "updates"`; the probe sends no thinking block at all.
+            thinkingDisplay: THINKING_DISPLAY_UPDATES,
+        })
         applyClaudeCodeHeaderFidelity(headers, serializedBody)
     }
 

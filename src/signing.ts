@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import { readClaudeClientAtis } from "./atis.ts"
 import { resolveClaudeCodeVersion } from "./claude-version.ts"
 
 const BILLING_SALT = "59cf53e54c78"
@@ -10,12 +11,37 @@ const PRIME64_3 = 0x165667b19e3779f9n
 const PRIME64_4 = 0x85ebca77c2b2ae63n
 const PRIME64_5 = 0x27d4eb2f165667c5n
 
-export const CC_ENTRYPOINT = "sdk-cli"
+/**
+ * The entrypoint pi claims.
+ *
+ * Claude Code does not hardcode this: it reads `CLAUDE_CODE_ENTRYPOINT`
+ * (`process.env.CLAUDE_CODE_ENTRYPOINT ?? "unknown"` in the 2.1.277 bundle) and
+ * its own launchers set it — `cli` for the interactive TUI, `sdk-cli` for
+ * `--print` / the Agent SDK. Reporting `sdk-cli` made every request look like it
+ * came from the SDK rather than the interactive CLI, which is the identity this
+ * fork exists to present, so the default is now the interactive one.
+ */
+export const CC_ENTRYPOINT = "cli"
+
+/**
+ * `cc_turn_origin`, also read by Claude Code from its own environment.
+ *
+ * Live 2.1.277 captures: the interactive CLI sends `human`, `--print` sends
+ * `sdk`. Same origin vocabulary as the entrypoint split.
+ */
+export const CC_TURN_ORIGIN = "human"
+
+/** Pi's requests are the main thread from Anthropic's point of view. */
+export const CC_REQUEST_CLASS = "main"
+
+/** Claude Code's `request-id` values, the input to `cc_prev_req`. */
+const PREV_REQUEST_ID = /^req_[A-Za-z0-9_-]{1,36}$/
 
 // SDK/runtime identity Claude Code reports in X-Stainless-* headers. Verified
-// unchanged across 2.1.266/267/268/270 — unlike the release version, these do
-// not move every release and nothing server-side enforces them. pi's own
-// @anthropic-ai/sdk is newer (0.123.x), which is itself a fingerprint.
+// unchanged across 2.1.266/267/268/270/277 — unlike the release version, these
+// do not move every release and nothing server-side enforces them. pi's own
+// @anthropic-ai/sdk is newer (0.123.x, runtime v26.5.0), which is itself a
+// fingerprint: the fetch patch overwrites all three.
 export const CC_SDK_PACKAGE_VERSION = "0.112.1"
 export const CC_RUNTIME_VERSION = "v26.3.0"
 export const CC_STAINLESS_TIMEOUT = "600"
@@ -23,6 +49,9 @@ export const AGENT_SDK_IDENTITY =
     "You are a Claude agent, built on Anthropic's Claude Agent SDK."
 export const LEGACY_CLI_IDENTITY =
     "You are Claude Code, Anthropic's official CLI for Claude."
+/** The third variant: `--print` with an appended system prompt. */
+export const LEGACY_CLI_AGENT_SDK_IDENTITY =
+    "You are Claude Code, Anthropic's official CLI for Claude, running within the Claude Agent SDK."
 
 // Verified 2026-09-10 against two live Claude Code 2.1.267 captures: the seed
 // still reproduces native cch exactly (it has not rotated since 2.1.220-2.1.234).
@@ -41,11 +70,21 @@ export function supportsLongContextBeta(model: string | undefined): boolean {
     return typeof model === "string" && !CONTEXT_200K_MODEL.test(model)
 }
 
-// Claude Code's 2.1.274 first-party beta set shared by Fable 5.1, Opus 5 and
+// Claude Code's 2.1.277 first-party beta set shared by Fable 5.1, Opus 5 and
 // Sonnet 5, in wire order, minus the model-gated 1M beta. Live-captured
-// 2026-09-17. `afk-mode` was remotely activated after the 2.1.270 baseline;
-// the same 2.1.270 binary now emits it, so this is gate drift rather than a
-// release-specific algorithm change.
+// 2026-09-19 from the interactive CLI (`cc_entrypoint=cli`).
+//
+// The 2.1.277 bundle's registry (`Vae` / `XKt` in chunk-c6v4tbe9) shows these
+// are per-model capability flags read from remote config, not release constants:
+// `advisor-tool`, `thinking-binding-controls` and `thinking-display-updates`
+// arrived through gates. What is stable is that an interactive first-party
+// request to these models carries exactly this list, which is what a fingerprint
+// has to reproduce.
+//
+// Two entries are deliberately absent even though the registry knows them:
+// `redact-thinking-2026-02-12` and `structured-outputs-2025-12-15`. Live captures
+// show both are stripped from the interactive main request (they survive only on
+// `sdk-cli` and auxiliary/title traffic), so emitting them would be a tell.
 //
 // This is merged into pi's computed beta list (see `mergeCapturedBetas`), never
 // asserted as a replacement. pi-ai treats a configured `anthropic-beta` header
@@ -61,16 +100,31 @@ export const CLAUDE_CODE_BETAS = [
     "context-management-2025-06-27",
     "prompt-caching-scope-2026-01-05",
     "mid-conversation-system-2026-04-07",
+    "advisor-tool-2026-03-01",
     "advanced-tool-use-2025-11-20",
     "effort-2025-11-24",
+    "thinking-binding-controls-2026-08-01",
+    "thinking-display-updates-2026-08-18",
     "afk-mode-2026-01-31",
     "extended-cache-ttl-2025-04-11",
     "cache-diagnosis-2026-04-07",
 ].join(",")
 
+/**
+ * `thinking-display-updates-2026-08-18` is coupled to the request's thinking
+ * display, not to the model.
+ *
+ * Live 2.1.277 captures: the interactive CLI sends the beta *and*
+ * `thinking.display: "updates"`. `--print` and the auxiliary requests ask for
+ * `display: "summarized"` and send no such beta. Emitting the beta while asking
+ * for a summary would be both unfaithful and a functional risk — the server may
+ * answer in a display mode pi did not ask for — so it follows the parameter.
+ */
+const DISPLAY_UPDATES_BETA = "thinking-display-updates-2026-08-18"
+export const THINKING_DISPLAY_UPDATES = "updates"
+
 const MID_CONVERSATION_TOOL_CHANGE_MODEL =
     /^claude-(?:fable-5(?:-1)?|opus-(?:4-8|5))(?:-|$)/
-const FALLBACK_CREDIT_MODEL = MID_CONVERSATION_TOOL_CHANGE_MODEL
 const FABLE_5_1_MODEL = /^claude-fable-5-1(?:-|$)/
 
 /**
@@ -103,6 +157,34 @@ export function buildUserAgent(): string {
         process.env.ANTHROPIC_USER_AGENT ??
         `claude-cli/${getCliVersion()} (external, ${getEntrypoint()})`
     )
+}
+
+/**
+ * `request-id` of the last response, replayed as `cc_prev_req` on the next
+ * request. Native chains turns this way: a live 2.1.277 capture's second turn
+ * carries `cc_prev_req` equal to the first turn's response `request-id`.
+ *
+ * The value is validated by the same regex Claude Code uses, so a missing or
+ * foreign header simply produces no field rather than a malformed one.
+ */
+let lastResponseRequestId: string | undefined
+
+export function setLastResponseRequestId(
+    value: string | null | undefined,
+): void {
+    lastResponseRequestId =
+        typeof value === "string" && PREV_REQUEST_ID.test(value)
+            ? value
+            : undefined
+}
+
+export function getLastResponseRequestId(): string | undefined {
+    return lastResponseRequestId
+}
+
+/** Test seam: forget the previous turn's request-id. */
+export function resetLastResponseRequestId(): void {
+    lastResponseRequestId = undefined
 }
 
 interface Message {
@@ -223,38 +305,82 @@ export function xxHash64(bytes: Uint8Array, seed = 0n): bigint {
 }
 
 /**
- * Structure-aware cch: xxHash64 over Claude Code's hash view of the final body
- * — every `model` string emptied and the dispatch-only members omitted.
- * `fallbacks`/`fallback_credit_token` are pi-only additions the native client
- * never hashes (Claude Code 2.1.267 omits them from its own hash view too).
+ * Claude Code's hash view: every key named `model` whose value is a string,
+ * emptied at any depth.
+ *
+ * The depth matters. A 2.1.277 Opus/Fable request embeds the model id a second
+ * time inside the `advisor` tool (`{"type":"advisor_20260301","name":"advisor",
+ * "model":"claude-opus-5",...}`), and native empties that one too. Emptying only
+ * the top-level field reproduced cch for Sonnet and Haiku but missed Opus and
+ * Fable on every live 2.1.277 capture — 14 of 15 captures only reproduce once
+ * the walk is recursive.
+ *
+ * `fallbacks` is *kept*: native hashes its own `fallbacks` field (it sends the
+ * literal `"default"` on auxiliary traffic). What native drops is
+ * `max_tokens` and `fallback_credit_token` — values it rewrites at dispatch.
+ */
+function emptyModelStrings(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map(emptyModelStrings)
+    if (value === null || typeof value !== "object") return value
+    const source = value as Record<string, unknown>
+    const out: Record<string, unknown> = {}
+    for (const [key, val] of Object.entries(source)) {
+        out[key] =
+            key === "model" && typeof val === "string"
+                ? ""
+                : emptyModelStrings(val)
+    }
+    return out
+}
+
+/**
+ * Structure-aware cch: xxHash64 over Claude Code's hash view of the final body —
+ * every `model` string emptied and the dispatch-only members omitted.
  */
 export function computeCchFromBody(body: Record<string, unknown>): string {
-    const normalized = structuredClone(body)
-    normalized.model = ""
+    const normalized: Record<string, unknown> = { ...body }
     delete normalized.max_tokens
-    delete normalized.fallbacks
     delete normalized.fallback_credit_token
     const hash = xxHash64(
-        new TextEncoder().encode(JSON.stringify(normalized)),
+        new TextEncoder().encode(JSON.stringify(emptyModelStrings(normalized))),
         getCchSeed(),
     )
     return (hash & 0xfffffn).toString(16).padStart(5, "0")
 }
 
+/**
+ * The billing header, in native field order:
+ * `cc_version; cc_entrypoint; cch; [cc_prev_req]; cc_prompt_id; cc_turn_origin`.
+ *
+ * 2.1.277 captures of the interactive CLI carry `cc_turn_origin=human` on every
+ * main request; `--print` sends `sdk` there. `cc_prev_req` appears from the
+ * second turn on and echoes the previous response's `request-id`.
+ */
 export function buildBillingHeaderValue(
     messages: Message[],
     version: string,
     entrypoint: string,
     promptId: string = crypto.randomUUID(),
+    prevRequestId: string | undefined = getLastResponseRequestId(),
+    turnOrigin: string | undefined = CC_TURN_ORIGIN,
 ): string {
     const text = extractFirstUserMessageText(messages)
     const suffix = computeVersionSuffix(text, version)
+    // Each field fragment carries its own leading space, mirroring Claude Code's
+    // builder (`cc_entrypoint=${g};${y}${C}${S}${w}${je}${Ye}`), so optional
+    // fields slot in without leaving a gap behind.
+    const prev =
+        prevRequestId !== undefined ? ` cc_prev_req=${prevRequestId};` : ""
+    const origin =
+        turnOrigin !== undefined ? ` cc_turn_origin=${turnOrigin};` : ""
     return (
         `x-anthropic-billing-header: ` +
         `cc_version=${version}.${suffix}; ` +
-        `cc_entrypoint=${entrypoint}; ` +
-        `${CCH_PLACEHOLDER}; ` +
-        `cc_prompt_id=${promptId};`
+        `cc_entrypoint=${entrypoint};` +
+        ` ${CCH_PLACEHOLDER};` +
+        `${prev}` +
+        ` cc_prompt_id=${promptId};` +
+        `${origin}`
     )
 }
 
@@ -305,12 +431,28 @@ function isOAuthAnthropic(headers: Headers): boolean {
     return auth.includes("sk-ant-oat")
 }
 
-function modelFromSerializedBody(serialized: string): string | undefined {
+/** What a captured request needs to be reproduced. */
+export interface CapturedRequestShape {
+    model?: string
+    /** `thinking.display` from the same body. */
+    thinkingDisplay?: string
+}
+
+function shapeFromSerializedBody(serialized: string): CapturedRequestShape {
     try {
-        const parsed = JSON.parse(serialized) as { model?: unknown }
-        return typeof parsed.model === "string" ? parsed.model : undefined
+        const parsed = JSON.parse(serialized) as {
+            model?: unknown
+            thinking?: { display?: unknown }
+        }
+        return {
+            model: typeof parsed.model === "string" ? parsed.model : undefined,
+            thinkingDisplay:
+                typeof parsed.thinking?.display === "string"
+                    ? parsed.thinking.display
+                    : undefined,
+        }
     } catch {
-        return undefined
+        return {}
     }
 }
 
@@ -331,21 +473,35 @@ function modelFromSerializedBody(serialized: string): string | undefined {
  * authoritative for feature betas, so betas for future pi features cannot be
  * dropped by this extension.
  */
-export function mergeCapturedBetas(headers: Headers, model?: string): void {
+export function mergeCapturedBetas(
+    headers: Headers,
+    request: CapturedRequestShape,
+): void {
     const current = headers.get("anthropic-beta")
     const betas = (current ?? "")
         .split(",")
         .map((entry) => entry.trim())
         .filter((entry) => entry.length > 0)
-    for (const beta of capturedBetasForModel(model)) {
+    for (const beta of capturedBetasFor(request)) {
         if (!betas.includes(beta)) betas.push(beta)
     }
     headers.set("anthropic-beta", betas.join(","))
 }
 
-/** Current live-captured Claude Code betas, including model-gated entries. */
-function capturedBetasForModel(model: string | undefined): string[] {
+/**
+ * Current live-captured Claude Code betas for one request, including
+ * model-gated entries.
+ *
+ * The `server-side-fallback` / `fallback-credit` betas are gone: the 2.1.277
+ * bundle emits them only together with a `fallbacks` body field (the same
+ * function returns `{fallbacks: ...}` and pushes both betas), and interactive
+ * main requests carried neither. Pi's `fallbacks` is stripped on OAuth anyway,
+ * so advertising a fallback capability the request does not carry would be the
+ * one thing native never does.
+ */
+export function capturedBetasFor(request: CapturedRequestShape): string[] {
     const betas = CLAUDE_CODE_BETAS.split(",")
+    const model = request.model
     if (!model) return betas
 
     const afterSystem = betas.indexOf("mid-conversation-system-2026-04-07") + 1
@@ -358,15 +514,10 @@ function capturedBetasForModel(model: string | undefined): string[] {
     }
     betas.splice(afterSystem, 0, ...systemBetas)
 
-    const afterEffort = betas.indexOf("effort-2025-11-24") + 1
-    const fallbackBetas: string[] = []
-    if (FABLE_5_1_MODEL.test(model)) {
-        fallbackBetas.push("server-side-fallback-2026-06-01")
+    if (request.thinkingDisplay !== THINKING_DISPLAY_UPDATES) {
+        const at = betas.indexOf(DISPLAY_UPDATES_BETA)
+        if (at >= 0) betas.splice(at, 1)
     }
-    if (FALLBACK_CREDIT_MODEL.test(model)) {
-        fallbackBetas.push("fallback-credit-2026-06-01")
-    }
-    betas.splice(afterEffort, 0, ...fallbackBetas)
     return betas
 }
 
@@ -385,7 +536,8 @@ function insertBeta(headers: Headers, beta: string): void {
 
 /**
  * Close the remaining client-identity gaps between pi's SDK and Claude Code:
- * Stainless version/timeout/runtime headers plus the model-gated 1M beta.
+ * Stainless version/timeout/runtime headers, the request class, the cached
+ * client-data pin, and the model-gated 1M beta.
  */
 export function applyClaudeCodeHeaderFidelity(
     headers: Headers,
@@ -394,12 +546,22 @@ export function applyClaudeCodeHeaderFidelity(
     headers.set("x-stainless-package-version", CC_SDK_PACKAGE_VERSION)
     headers.set("x-stainless-timeout", CC_STAINLESS_TIMEOUT)
     headers.set("x-stainless-runtime-version", CC_RUNTIME_VERSION)
-    if (
-        serializedBody !== undefined &&
-        supportsLongContextBeta(modelFromSerializedBody(serializedBody))
-    ) {
+    headers.set("x-claude-code-request-class", CC_REQUEST_CLASS)
+
+    if (serializedBody === undefined) return
+    const shape = shapeFromSerializedBody(serializedBody)
+
+    if (supportsLongContextBeta(shape.model)) {
         insertBeta(headers, LONG_CONTEXT_BETA)
     }
+    // Best effort: Claude Code itself has no pin for a slot it has never
+    // fetched, and sends none either.
+    const atis = readClaudeClientAtis({
+        entrypoint: getEntrypoint(),
+        model: shape.model,
+        version: getCliVersion(),
+    })
+    if (atis !== undefined) headers.set("x-cc-atis", atis)
 }
 
 let fetchPatched = false
@@ -445,8 +607,8 @@ export function installClaudeCodeFetchPatch(): void {
         mergeCapturedBetas(
             headers,
             serializedBody === undefined
-                ? undefined
-                : modelFromSerializedBody(serializedBody),
+                ? {}
+                : shapeFromSerializedBody(serializedBody),
         )
         // Re-assert the user-agent per request. The provider registration sets
         // it once at extension load, so a Claude Code update mid-session would
@@ -454,20 +616,52 @@ export function installClaudeCodeFetchPatch(): void {
         // header (built per request) claimed the new one.
         headers.set("user-agent", buildUserAgent())
 
-        if (serializedBody !== undefined) {
-            const patched = patchClaudeCodeCch(serializedBody)
-            if (typeof init?.body === "string") {
-                return original(url, { ...init, headers, body: patched })
-            }
-            return original(
-                new Request(url, {
-                    method: (input as Request).method,
-                    headers,
-                    body: patched,
-                    signal: init?.signal ?? (input as Request).signal,
-                }),
-            )
-        }
-        return original(url, { ...init, headers })
+        return rememberRequestId(
+            serializedBody !== undefined
+                ? sendWithBody(
+                      original,
+                      url,
+                      input as RequestInfo | URL,
+                      init,
+                      headers,
+                      patchClaudeCodeCch(serializedBody),
+                  )
+                : original(url, { ...init, headers }),
+        )
     }
+}
+
+/**
+ * Record the response's `request-id` for the next request's `cc_prev_req`.
+ * Read off the headers, so the streamed body is never touched.
+ */
+function rememberRequestId(pending: Promise<Response>): Promise<Response> {
+    return pending.then((response) => {
+        setLastResponseRequestId(response.headers.get("request-id"))
+        return response
+    })
+}
+
+function sendWithBody(
+    original: typeof fetch,
+    url: string,
+    input: RequestInfo | URL,
+    init: RequestInit | undefined,
+    headers: Headers,
+    body: string,
+): Promise<Response> {
+    if (typeof init?.body === "string") {
+        return original(url, { ...init, headers, body })
+    }
+    if (input instanceof Request) {
+        return original(
+            new Request(url, {
+                method: input.method,
+                headers,
+                body,
+                signal: init?.signal ?? input.signal,
+            }),
+        )
+    }
+    return original(url, { ...init, headers, body })
 }

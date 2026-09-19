@@ -125,9 +125,13 @@ function applyCredential(ctx: ExtensionContext): boolean {
  * - Overrides the user-agent to the full Claude Code form and injects the
  *   Claude Code billing header, so requests bill against the Claude Pro/Max
  *   subscription plan rather than pay-as-you-go API credits or extra usage.
+ * - Presents the *interactive* CLI's identity, not the Agent SDK's:
+ *   `cc_entrypoint=cli`, the CLI identity prompt, `cc_turn_origin=human`,
+ *   `cc_prev_req`, `x-claude-code-request-class` and Claude Code's cached
+ *   `x-cc-atis` pin. See ./signing.ts and ./atis.ts.
  *
- * pi's built-in Anthropic provider supplies the remaining Claude Code fidelity
- * (identity prompt, beta flags, tool naming) for OAuth tokens.
+ * pi's built-in Anthropic provider supplies the rest of the Claude Code request
+ * shape (beta flags derived from model compat, tool naming) for OAuth tokens.
  */
 const extension = async (pi: ExtensionAPI): Promise<void> => {
     initLogger()
@@ -258,10 +262,11 @@ const extension = async (pi: ExtensionAPI): Promise<void> => {
     }
 
     // Override the user-agent to the full Claude Code form
-    // (`claude-cli/<version> (external, <entrypoint>)`). pi sends a bare
+    // (`claude-cli/<version> (external, cli)`). pi sends a bare
     // `claude-cli/<version>`, which Anthropic's plan-billing validation does
     // not accept — without this the request bills against extra usage instead
-    // of the subscription plan.
+    // of the subscription plan. The fetch patch re-asserts it per request, so a
+    // Claude Code update mid-session is picked up without a restart.
     //
     // The Claude Code beta set is deliberately NOT declared here. pi-ai treats
     // a configured `anthropic-beta` header as a full replacement for its own
@@ -286,10 +291,9 @@ const extension = async (pi: ExtensionAPI): Promise<void> => {
         applyCredential(ctx)
     })
 
-    // Inject the Claude Code billing header so requests bill against the
-    // Claude Pro/Max subscription rather than pay-as-you-go API credits.
-    // pi's built-in Anthropic provider supplies the identity, betas, and
-    // user-agent for OAuth tokens but not this header.
+    // Inject the Claude Code billing header and the CLI identity line, so
+    // requests bill against the Claude Pro/Max subscription rather than
+    // pay-as-you-go API credits.
     pi.on("before_provider_request", (event, ctx) => {
         try {
             const sessionId = ctx.sessionManager.getSessionId()
