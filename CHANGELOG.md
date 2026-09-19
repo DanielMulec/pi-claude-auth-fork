@@ -1,5 +1,41 @@
 # Changelog
 
+# 0.7.2 (2026-09-19) — fork release
+
+### Changed
+
+- **Verified Claude Code 2.1.278 `sdk-cli` fingerprint** while keeping the coherent
+  Agent SDK persona (`cc_entrypoint=sdk-cli`, Agent SDK identity,
+  `cc_turn_origin=sdk`). Interactive `cli` remains dormant contingency only.
+- **Recursive `cch` hash view:** every string-valued `model` key is emptied at any
+  depth (fixes Opus/Fable advisor nested `model`). Hash view keeps `fallbacks`
+  and drops only dispatch-only `max_tokens` / `fallback_credit_token`. Pi still
+  strips array `fallbacks` from the wire body (OAuth schema).
+- **2.1.278 beta set (native `--print`):** add `advisor-tool` and
+  `thinking-binding-controls`; stop advertising bare `server-side-fallback` /
+  `fallback-credit` on main traffic; gate `thinking-display-updates` on
+  `thinking.display === "updates"` only.
+- Billing header gains `cc_turn_origin=sdk`; headers gain
+  `x-claude-code-request-class: main`. `x-cc-atis` and process-global
+  `cc_prev_req` are deliberately omitted.
+- `FALLBACK_CC_VERSION` advanced to `2.1.278` (installed discovery stays primary).
+- **Oracle tooling:** `pnpm run capture`, `verify:fingerprint`, pi capture
+  redirect, interactive TUI driver (research only). `lane:check` gains
+  `--replay`, third-party / invalid / plan / extra-usage / blocked /
+  inconclusive verdict classes, and a false-green caveat on the tiny A/B probe.
+
+### Verified
+
+- Native `claude -p` 2.1.278 loopback captures (Sonnet 5, Opus 5, Fable 5.1):
+  cch `27ff3` / `67c38` / `a8630`, suffix `773` for `Reply with exactly: OK`;
+  nested advisor `model` on Opus/Fable; beta delta vs fork empty after upgrade.
+- Real Pi path-package wire captures through this extension: cch recomputes;
+  live `--replay` HTTP 200 `class=plan` on all three models with extra usage
+  disabled (`overageStatus=rejected`).
+- Negative control: same Pi body with `cli` + human turn origin → HTTP 400
+  third-party classifier (oracle discriminates).
+- `pnpm test` 62/62; `pnpm build`, `oxlint`, `oxfmt --check` clean.
+
 # 0.7.1 (2026-09-17) — fork release
 
 ### Changed

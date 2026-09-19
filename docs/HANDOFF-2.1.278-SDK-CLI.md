@@ -1,6 +1,7 @@
 # Handoff: Claude Code 2.1.278 on `sdk-cli`
 
 Cold-start brief for the next agent. Written 2026-09-19 with GPT-5.6 Sol.  
+**Status (2026-09-19):** landed as **v0.7.2** on `main` — recursive cch, 2.1.278 betas/`cc_turn_origin`, oracle tooling, real Pi plan replay + negative control. This file remains historical procedure + pitfalls.  
 Companion (dormant interactive path): [`CLAUDE-OAUTH-CONTINGENCY.md`](./CLAUDE-OAUTH-CONTINGENCY.md).
 
 ## Mission
@@ -16,14 +17,14 @@ Upgrade this fork to a **verified Claude Code 2.1.278 `sdk-cli` fingerprint** wh
 
 ## Repo state
 
-| Item | Value |
-|---|---|
-| Path | `/Users/danielmulec/Projekte/deepseeksperiments/pi-claude-auth-fork` |
-| How pi loads it | Path package in `~/.pi/agent/settings.json` → this repo |
-| `main` at handoff | `1e11037` (docs only after `3df2adb`) |
-| Runtime code baseline | `3df2adb` **v0.7.1** (fingerprint verified through **2.1.274**) |
-| Machine CC install | often newer (e.g. **2.1.278** under `~/.local/share/claude/versions`) — version string already auto-resolved |
-| Persona bundle (keep atomic) | `sdk-cli` · Agent SDK identity · `cc_turn_origin=sdk` · UA `(external, sdk-cli)` |
+| Item                         | Value                                                                                                        |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Path                         | `/Users/danielmulec/Projekte/deepseeksperiments/pi-claude-auth-fork`                                         |
+| How pi loads it              | Path package in `~/.pi/agent/settings.json` → this repo                                                      |
+| `main` at handoff            | `1e11037` (docs only after `3df2adb`)                                                                        |
+| Runtime code baseline        | `3df2adb` **v0.7.1** (fingerprint verified through **2.1.274**)                                              |
+| Machine CC install           | often newer (e.g. **2.1.278** under `~/.local/share/claude/versions`) — version string already auto-resolved |
+| Persona bundle (keep atomic) | `sdk-cli` · Agent SDK identity · `cc_turn_origin=sdk` · UA `(external, sdk-cli)`                             |
 
 Read **`AGENTS.md` first** — git + GitNexus rules are binding:
 
@@ -56,12 +57,12 @@ Read **`AGENTS.md` first** — git + GitNexus rules are binding:
 
 **Review before porting:**
 
-| Piece | Caution |
-|---|---|
-| `x-claude-code-request-class` | Scope to real main traffic |
-| `cc_prev_req` | Must not stay module-global |
-| `x-cc-atis` | Opaque/staleable; exact match + measured value or omit |
-| Aux paths | Compaction/title/bg may skip billing-header hook |
+| Piece                         | Caution                                                |
+| ----------------------------- | ------------------------------------------------------ |
+| `x-claude-code-request-class` | Scope to real main traffic                             |
+| `cc_prev_req`                 | Must not stay module-global                            |
+| `x-cc-atis`                   | Opaque/staleable; exact match + measured value or omit |
+| Aux paths                     | Compaction/title/bg may skip billing-header hook       |
 
 ### `archive/v0.8.0-interactive` (`6f36b8a`)
 
@@ -79,32 +80,32 @@ Do **not** cherry-pick either archive wholesale.
 
 ## Known pitfalls
 
-| Pitfall | Fact |
-|---|---|
-| Classifier coherence | `cli` + real Pi system → third-party 400 (`req_011CfCDKNaqT1d5Js8uJZbr9`, 2026-09-19) |
-| False green | Tiny/`lane:check`/hand-built “Pi-like” can 200 while real Pi fails |
-| HTTP 200 | Not plan proof if extra usage is available |
-| Old `cch` | Top-level-only `model=""` misses Opus/Fable nested advisor `model` |
-| Opus schema | `fallbacks: Extra inputs are not permitted` ≠ third-party classifier |
-| Native reference for this mission | **`claude -p` / sdk-cli**, not interactive TUI |
-| More headers | More coherence surfaces — omit uncertain optionals |
+| Pitfall                           | Fact                                                                                  |
+| --------------------------------- | ------------------------------------------------------------------------------------- |
+| Classifier coherence              | `cli` + real Pi system → third-party 400 (`req_011CfCDKNaqT1d5Js8uJZbr9`, 2026-09-19) |
+| False green                       | Tiny/`lane:check`/hand-built “Pi-like” can 200 while real Pi fails                    |
+| HTTP 200                          | Not plan proof if extra usage is available                                            |
+| Old `cch`                         | Top-level-only `model=""` misses Opus/Fable nested advisor `model`                    |
+| Opus schema                       | `fallbacks: Extra inputs are not permitted` ≠ third-party classifier                  |
+| Native reference for this mission | **`claude -p` / sdk-cli**, not interactive TUI                                        |
+| More headers                      | More coherence surfaces — omit uncertain optionals                                    |
 
 ## Work order
 
 1. **Baseline** — Read AGENTS, this handoff, contingency, LANE-MONITORING, current tests, both archive diffs.  
-   *Done when:* port list is independent slices with risk notes.
+   _Done when:_ port list is independent slices with risk notes.
 2. **Oracle first** — Port capture/replay + verdict classes **without** default shape change.  
-   *Done when:* SDK positive, `cli`+Pi negative, and schema-invalid fallback are distinguished.
+   _Done when:_ SDK positive, `cli`+Pi negative, and schema-invalid fallback are distinguished.
 3. **Recursive CCH** — Native 2.1.278 Sonnet/Opus/Fable vectors.  
-   *Done when:* vectors match; sent bytes = post-`cch` digest.
+   _Done when:_ vectors match; sent bytes = post-`cch` digest.
 4. **Version evidence** — Fallback/vectors only; discovery stays authoritative.  
-   *Done when:* 2.1.278 suffix tests pass.
+   _Done when:_ 2.1.278 suffix tests pass.
 5. **Beta/body coherence** — Per-model table: native `--print` ∪ Pi-required.  
-   *Done when:* no missing required / no unsupported advertised.
+   _Done when:_ no missing required / no unsupported advertised.
 6. **Headers audit** — Only proven sdk-class fields; main vs aux mapped.  
-   *Done when:* no unscoped globals.
+   _Done when:_ no unscoped globals.
 7. **Real Pi verify** — Path package after `/reload`; Sonnet/Opus/Fable; usage delta.  
-   *Done when:* hard oracle = plan; no extra-usage burn.
+   _Done when:_ hard oracle = plan; no extra-usage burn.
 8. **Review** — GitNexus detect_changes + independent review before commit/push asks.
 
 ## Verification
@@ -127,17 +128,17 @@ pnpm run lane:check -- --replay <real-pi-capture>
 
 ## Files
 
-| Path | Role |
-|---|---|
-| `AGENTS.md` | Git / GitNexus |
+| Path                               | Role                                  |
+| ---------------------------------- | ------------------------------------- |
+| `AGENTS.md`                        | Git / GitNexus                        |
 | `docs/CLAUDE-OAUTH-CONTINGENCY.md` | Persona decision; dormant interactive |
-| `docs/LANE-MONITORING.md` | Billing probes / cadence |
-| `src/signing.ts` (+ tests) | Persona, `cch`, betas, fetch patch |
-| `src/transforms.ts` (+ tests) | Billing + identity blocks |
-| `src/claude-version.ts` (+ tests) | Version resolution |
-| `src/index.ts` | Hooks / provider register |
-| `scripts/lane-check.ts` | Probe (smoke until replay) |
-| `scripts/usage.ts` | Plan vs extra usage |
+| `docs/LANE-MONITORING.md`          | Billing probes / cadence              |
+| `src/signing.ts` (+ tests)         | Persona, `cch`, betas, fetch patch    |
+| `src/transforms.ts` (+ tests)      | Billing + identity blocks             |
+| `src/claude-version.ts` (+ tests)  | Version resolution                    |
+| `src/index.ts`                     | Hooks / provider register             |
+| `scripts/lane-check.ts`            | Probe (smoke until replay)            |
+| `scripts/usage.ts`                 | Plan vs extra usage                   |
 
 Archive-only to evaluate: `scripts/capture-requests.ts`, capture pty driver, `scripts/verify-fingerprint.ts`, `src/atis.ts`.
 

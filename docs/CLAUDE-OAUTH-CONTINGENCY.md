@@ -9,41 +9,41 @@ Unsupported impersonation of Claude Code. Anthropic may change classification or
 
 ## Current route
 
-Production / canonical line: `3df2adb` (**v0.7.1**).
+Production / canonical line: **v0.7.2** (2.1.278 `sdk-cli` fingerprint; work from `main` / `HEAD`).
 
-| Claim | Value |
-|---|---|
-| Entrypoint | `sdk-cli` |
-| System identity | Agent SDK line (“You are a Claude agent…”) |
-| Turn origin | `sdk` (when present) |
-| Pi system prompt / tools | Unchanged |
+| Claim                    | Value                                      |
+| ------------------------ | ------------------------------------------ |
+| Entrypoint               | `sdk-cli`                                  |
+| System identity          | Agent SDK line (“You are a Claude agent…”) |
+| Turn origin              | `sdk` (when present)                       |
+| Pi system prompt / tools | Unchanged                                  |
 
 **Why:** real Pi requests with this coherent bundle bill to plan windows today, and keep Pi’s behavior.  
-**Weakness:** Anthropic may later meter SDK / `claude -p` / third-party-shaped traffic separately. This route is the *working* costume, not a permanent entitlement.
+**Weakness:** Anthropic may later meter SDK / `claude -p` / third-party-shaped traffic separately. This route is the _working_ costume, not a permanent entitlement.
 
 Do not flip production to interactive `cli` markers while Pi’s system prompt remains in `system[]`.
 
 ## Outage record (authoritative)
 
-| Field | Value |
-|---|---|
-| When | 2026-09-19 ~05:03Z |
-| Where | Herdr pane `wA:pR`; pi session under `mobile_coding_harness` id `01a0b80c-…` |
-| Model | `claude-opus-5` |
-| Error | `HTTP 400` · `Third-party apps now draw from your extra usage, not your plan limits…` |
-| `request_id` | `req_011CfCDKNaqT1d5Js8uJZbr9` |
-| Recovery | Reset fork to `3df2adb`, `/reload` → same user text succeeded ~05:11Z |
+| Field        | Value                                                                                 |
+| ------------ | ------------------------------------------------------------------------------------- |
+| When         | 2026-09-19 ~05:03Z                                                                    |
+| Where        | Herdr pane `wA:pR`; pi session under `mobile_coding_harness` id `01a0b80c-…`          |
+| Model        | `claude-opus-5`                                                                       |
+| Error        | `HTTP 400` · `Third-party apps now draw from your extra usage, not your plan limits…` |
+| `request_id` | `req_011CfCDKNaqT1d5Js8uJZbr9`                                                        |
+| Recovery     | Reset fork to `3df2adb`, `/reload` → same user text succeeded ~05:11Z                 |
 
 ## Classifier rule
 
 Measured in `e847c39` by replaying **one real Pi request**, one mutation at a time, recomputing `cch`, 3× each, with **extra-usage credits exhausted** (hard oracle: 200 ≈ plan, that 400 ≈ third-party):
 
-| Shape | Verdict |
-|---|---|
-| `cli` + **Pi** system prompt | Third-party 400 |
-| `cli` + **Claude Code** system prompt | Plan pass |
+| Shape                                                    | Verdict         |
+| -------------------------------------------------------- | --------------- |
+| `cli` + **Pi** system prompt                             | Third-party 400 |
+| `cli` + **Claude Code** system prompt                    | Plan pass       |
 | `cli` + CC prompt + **Pi still in another system block** | Third-party 400 |
-| `sdk-cli` + Agent SDK identity + Pi prompt | Plan pass |
+| `sdk-cli` + Agent SDK identity + Pi prompt               | Plan pass       |
 
 - Classifier reads **all** system blocks and checks **client claim ↔ prompt coherence**.
 - Tool rename / drop tools / clamp `max_tokens` / `context_management` did **not** rescue `cli` + Pi prompt.
@@ -64,11 +64,11 @@ Acceptance fixture = **captured final wire request from real Pi** (post all tran
 
 ## Recoverable history
 
-| Commit | Role |
-|---|---|
-| `6f36b8a94c05ce308d2800435d60f0f5e056b492` | **v0.8.0** — full interactive costume (`cli`, CC-shaped fields). Caused the outage with Pi’s prompt. |
+| Commit                                     | Role                                                                                                                                     |
+| ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `6f36b8a94c05ce308d2800435d60f0f5e056b492` | **v0.8.0** — full interactive costume (`cli`, CC-shaped fields). Caused the outage with Pi’s prompt.                                     |
 | `e847c397b1362a509d09a234ec1049add217d287` | **v0.8.1** — restored coherent `sdk-cli` persona; documents classifier; real-request replay; keeps independent fidelity work from 0.8.0. |
-| `3df2adb2dd00cc1365b31e812ca64724239e4d82` | **v0.7.1** — current production after hard reset. |
+| `3df2adb2dd00cc1365b31e812ca64724239e4d82` | **v0.7.1** — current production after hard reset.                                                                                        |
 
 ```bash
 git show archive/v0.8.1-classifier   # e847c39 — autopsy + sdk-cli restore
@@ -82,20 +82,20 @@ These `archive/*` branches keep the objects reachable (not dangling reflog-only)
 
 Recover **slices**, never either commit wholesale. Keep persona = `sdk-cli` unless a [trigger](#reopen-trigger) says otherwise.
 
-| Recover (after approval) | Notes |
-|---|---|
-| Capture / redaction / fingerprint compare | Observability first; no default shape change |
-| Real-request `lane:check --replay` | Verdicts: plan · third-party · invalid · **inconclusive** |
-| Recursive empty of string-valued `model` keys for `cch` | Needed for Opus/Fable nested advisor `model` |
-| No-install version fallback bump | Installed-version discovery stays primary |
-| Beta ↔ body coupling | Verify against **sdk-cli** captures per model |
-| `x-claude-code-request-class` | Scope to real **main** traffic only |
+| Recover (after approval)                                | Notes                                                     |
+| ------------------------------------------------------- | --------------------------------------------------------- |
+| Capture / redaction / fingerprint compare               | Observability first; no default shape change              |
+| Real-request `lane:check --replay`                      | Verdicts: plan · third-party · invalid · **inconclusive** |
+| Recursive empty of string-valued `model` keys for `cch` | Needed for Opus/Fable nested advisor `model`              |
+| No-install version fallback bump                        | Installed-version discovery stays primary                 |
+| Beta ↔ body coupling                                    | Verify against **sdk-cli** captures per model             |
+| `x-claude-code-request-class`                           | Scope to real **main** traffic only                       |
 
-| Defer / redesign | Why |
-|---|---|
-| `cc_prev_req` | 0.8.x used process-global last id — unsafe across sessions/concurrency |
-| `x-cc-atis` | Opaque pin; wrong/stale pin worse than omit |
-| Auxiliary paths | Compaction / title / bg agents may skip billing-header hook |
+| Defer / redesign | Why                                                                    |
+| ---------------- | ---------------------------------------------------------------------- |
+| `cc_prev_req`    | 0.8.x used process-global last id — unsafe across sessions/concurrency |
+| `x-cc-atis`      | Opaque pin; wrong/stale pin worse than omit                            |
+| Auxiliary paths  | Compaction / title / bg agents may skip billing-header hook            |
 
 **Never restore as production default:**
 
@@ -170,10 +170,10 @@ If SDK plan routing is also dead: API/extra billing, native Claude Code transpor
 
 ## Related paths
 
-| Path | Use |
-|---|---|
-| `src/signing.ts` | entrypoint, UA, `cch`, betas, fetch patch |
-| `src/transforms.ts` | billing header + identity injection |
-| `docs/LANE-MONITORING.md` | billing probes, version cadence |
-| `scripts/lane-check.ts` | today: tiny A/B (false-green risk until replay lands) |
-| Commits `6f36b8a`, `e847c39` | failed interactive attempt + autopsy |
+| Path                         | Use                                                   |
+| ---------------------------- | ----------------------------------------------------- |
+| `src/signing.ts`             | entrypoint, UA, `cch`, betas, fetch patch             |
+| `src/transforms.ts`          | billing header + identity injection                   |
+| `docs/LANE-MONITORING.md`    | billing probes, version cadence                       |
+| `scripts/lane-check.ts`      | today: tiny A/B (false-green risk until replay lands) |
+| Commits `6f36b8a`, `e847c39` | failed interactive attempt + autopsy                  |

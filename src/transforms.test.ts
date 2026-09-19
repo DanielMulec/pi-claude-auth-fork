@@ -39,7 +39,7 @@ test("injectBillingHeader: billing + Agent SDK identity, keeps extra system", ()
     // version-specific vectors live in signing.test.ts.
     assert.match(
         system[0].text,
-        /^x-anthropic-billing-header: cc_version=\d+\.\d+\.\d+\.[0-9a-f]{3}; cc_entrypoint=sdk-cli; cch=00000; cc_prompt_id=[0-9a-f-]{36};$/,
+        /^x-anthropic-billing-header: cc_version=\d+\.\d+\.\d+\.[0-9a-f]{3}; cc_entrypoint=sdk-cli; cch=00000; cc_prompt_id=[0-9a-f-]{36}; cc_turn_origin=sdk;$/,
     )
     assert.equal(system[1].text, AGENT_SDK_IDENTITY)
     assert.equal(system[2].text, "Pi system")

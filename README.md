@@ -1,13 +1,15 @@
 # pi-claude-auth
 
-> **Fork status (v0.7.1):** maintained fork of upstream `pi-claude-auth@0.1.3` (last upstream release 2026-06-04).
+> **Fork status (v0.7.2):** maintained fork of upstream `pi-claude-auth@0.1.3` (last upstream release 2026-06-04).
 > Changes vs upstream:
 >
 > - **Claude Code version is read from the installation, not pinned** — the release number is resolved from `~/.local/share/claude/versions` on every request, so a Claude Code update needs no change here. `ANTHROPIC_CLI_VERSION` remains a manual override, and a constant covers machines with no Claude Code installed (announced on stderr when used)
-> - **`cch` verified through live Claude Code 2.1.274** — the recovered seed (`4d659218e32a3268`) plus Claude Code's hash view (empty `model`, dropped `max_tokens`/`fallbacks`/`fallback_credit_token`) reproduces native `cch` on live captures
-> - **The current beta fingerprint is merged into pi's, never substituted for it** — the 2.1.274 capture confirms the common set and Fable 5.1 / Opus 5 model-gated betas, while preserving every beta pi derives from model compatibility flags
+> - **`cch` verified through live Claude Code 2.1.278 `sdk-cli`** — seed `4d659218e32a3268`; every string-valued `model` emptied at any depth; hash view drops `max_tokens`/`fallback_credit_token` and keeps `fallbacks` (Pi still strips array `fallbacks` on the wire)
+> - **Coherent `sdk-cli` persona** — Agent SDK identity, `cc_turn_origin=sdk`, `x-claude-code-request-class: main`; interactive `cli` is contingency-only
+> - **The current beta fingerprint is merged into pi's, never substituted for it** — 2.1.278 `--print` common set plus model gates; no bare fallback betas on main traffic; `thinking-display-updates` only when `thinking.display` is `updates`
+> - **Oracle tooling** — `pnpm run capture` / `verify:fingerprint` / `lane:check -- --replay` (tiny A/B probe is headers-plausible only)
 > - **pi ≥ 0.83 compatibility**: `ModelRegistry.authStorage` (removed in 0.83) is now feature-detected; auth.json seeding + `/login` cover the current session
-> - **New models added to the smoke-test list**: `claude-sonnet-5`, `claude-opus-5`
+> - **Models on the smoke-test list**: `claude-sonnet-5`, `claude-opus-5`, `claude-fable-5-1`
 
 Self-contained Anthropic auth for the [pi coding agent](https://pi.dev) using
 your existing Claude Code credentials — no separate login or API key needed.

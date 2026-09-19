@@ -12,8 +12,17 @@ const PRIME64_5 = 0x27d4eb2f165667c5n
 
 export const CC_ENTRYPOINT = "sdk-cli"
 
+/**
+ * `cc_turn_origin` — must agree with the claimed entrypoint.
+ * Live 2.1.278 `claude -p` / sdk-cli sends `sdk`; interactive TUI sends `human`.
+ */
+export const CC_TURN_ORIGIN = "sdk"
+
+/** Pi main-thread traffic. Live 2.1.278 sdk-cli captures set this on every main request. */
+export const CC_REQUEST_CLASS = "main"
+
 // SDK/runtime identity Claude Code reports in X-Stainless-* headers. Verified
-// unchanged across 2.1.266/267/268/270 — unlike the release version, these do
+// unchanged across 2.1.266/267/268/270/278 — unlike the release version, these do
 // not move every release and nothing server-side enforces them. pi's own
 // @anthropic-ai/sdk is newer (0.123.x), which is itself a fingerprint.
 export const CC_SDK_PACKAGE_VERSION = "0.112.1"
@@ -41,11 +50,12 @@ export function supportsLongContextBeta(model: string | undefined): boolean {
     return typeof model === "string" && !CONTEXT_200K_MODEL.test(model)
 }
 
-// Claude Code's 2.1.274 first-party beta set shared by Fable 5.1, Opus 5 and
-// Sonnet 5, in wire order, minus the model-gated 1M beta. Live-captured
-// 2026-09-17. `afk-mode` was remotely activated after the 2.1.270 baseline;
-// the same 2.1.270 binary now emits it, so this is gate drift rather than a
-// release-specific algorithm change.
+// Claude Code's 2.1.278 first-party beta set shared by Fable 5.1, Opus 5 and
+// Sonnet 5 under `claude -p` / sdk-cli, in wire order, minus the model-gated
+// 1M beta. Live-captured 2026-09-19. Relative to 2.1.274: adds `advisor-tool`
+// and `thinking-binding-controls`. `thinking-display-updates` is NOT in the
+// common sdk-cli set (display is `omitted`/`summarized`); it is added only when
+// the body asks for `thinking.display: "updates"`.
 //
 // This is merged into pi's computed beta list (see `mergeCapturedBetas`), never
 // asserted as a replacement. pi-ai treats a configured `anthropic-beta` header
@@ -61,16 +71,21 @@ export const CLAUDE_CODE_BETAS = [
     "context-management-2025-06-27",
     "prompt-caching-scope-2026-01-05",
     "mid-conversation-system-2026-04-07",
+    "advisor-tool-2026-03-01",
     "advanced-tool-use-2025-11-20",
     "effort-2025-11-24",
+    "thinking-binding-controls-2026-08-01",
     "afk-mode-2026-01-31",
     "extended-cache-ttl-2025-04-11",
     "cache-diagnosis-2026-04-07",
 ].join(",")
 
+/** Coupled to `thinking.display: "updates"`, not to the model. */
+const DISPLAY_UPDATES_BETA = "thinking-display-updates-2026-08-18"
+export const THINKING_DISPLAY_UPDATES = "updates"
+
 const MID_CONVERSATION_TOOL_CHANGE_MODEL =
     /^claude-(?:fable-5(?:-1)?|opus-(?:4-8|5))(?:-|$)/
-const FALLBACK_CREDIT_MODEL = MID_CONVERSATION_TOOL_CHANGE_MODEL
 const FABLE_5_1_MODEL = /^claude-fable-5-1(?:-|$)/
 
 /**
@@ -223,38 +238,74 @@ export function xxHash64(bytes: Uint8Array, seed = 0n): bigint {
 }
 
 /**
- * Structure-aware cch: xxHash64 over Claude Code's hash view of the final body
- * — every `model` string emptied and the dispatch-only members omitted.
- * `fallbacks`/`fallback_credit_token` are pi-only additions the native client
- * never hashes (Claude Code 2.1.267 omits them from its own hash view too).
+ * Claude Code's hash view: every key named `model` whose value is a string,
+ * emptied at any depth.
+ *
+ * The depth matters. A 2.1.277+ Opus/Fable request embeds the model id a second
+ * time inside the `advisor` tool (`{"type":"advisor_20260301","name":"advisor",
+ * "model":"claude-opus-5",...}`), and native empties that one too. Emptying only
+ * the top-level field reproduced cch for Sonnet and Haiku but missed Opus and
+ * Fable on live captures.
+ *
+ * Schema properties named `model` whose value is an object (e.g. JSON Schema
+ * `{ type: "string" }`) are walked, not blanked.
+ */
+function emptyModelStrings(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map(emptyModelStrings)
+    if (value === null || typeof value !== "object") return value
+    const source = value as Record<string, unknown>
+    const out: Record<string, unknown> = {}
+    for (const [key, val] of Object.entries(source)) {
+        out[key] =
+            key === "model" && typeof val === "string"
+                ? ""
+                : emptyModelStrings(val)
+    }
+    return out
+}
+
+/**
+ * Structure-aware cch: xxHash64 over Claude Code's hash view of the final body —
+ * every string-valued `model` emptied and the dispatch-only members omitted.
+ *
+ * `fallbacks` is *kept* in the hash view: native hashes its own field (often the
+ * literal `"default"` on auxiliary traffic). What native drops is `max_tokens`
+ * and `fallback_credit_token`. Pi still strips `fallbacks` from the *wire* body
+ * in `patchClaudeCodeCch` before calling this (OAuth rejects Pi's array form).
  */
 export function computeCchFromBody(body: Record<string, unknown>): string {
-    const normalized = structuredClone(body)
-    normalized.model = ""
+    const normalized: Record<string, unknown> = { ...body }
     delete normalized.max_tokens
-    delete normalized.fallbacks
     delete normalized.fallback_credit_token
     const hash = xxHash64(
-        new TextEncoder().encode(JSON.stringify(normalized)),
+        new TextEncoder().encode(JSON.stringify(emptyModelStrings(normalized))),
         getCchSeed(),
     )
     return (hash & 0xfffffn).toString(16).padStart(5, "0")
 }
 
+/**
+ * Billing header in native 2.1.278 sdk-cli field order:
+ * `cc_version; cc_entrypoint; cch; cc_prompt_id; cc_turn_origin`.
+ */
 export function buildBillingHeaderValue(
     messages: Message[],
     version: string,
     entrypoint: string,
     promptId: string = crypto.randomUUID(),
+    turnOrigin: string | undefined = CC_TURN_ORIGIN,
 ): string {
     const text = extractFirstUserMessageText(messages)
     const suffix = computeVersionSuffix(text, version)
+    const origin =
+        turnOrigin !== undefined ? ` cc_turn_origin=${turnOrigin};` : ""
     return (
         `x-anthropic-billing-header: ` +
         `cc_version=${version}.${suffix}; ` +
         `cc_entrypoint=${entrypoint}; ` +
         `${CCH_PLACEHOLDER}; ` +
-        `cc_prompt_id=${promptId};`
+        `cc_prompt_id=${promptId};` +
+        `${origin}`
     )
 }
 
@@ -305,12 +356,28 @@ function isOAuthAnthropic(headers: Headers): boolean {
     return auth.includes("sk-ant-oat")
 }
 
-function modelFromSerializedBody(serialized: string): string | undefined {
+/** What a captured request needs so offline verify can mirror production. */
+export interface CapturedRequestShape {
+    model?: string
+    /** `thinking.display` from the same body — gates display-updates beta. */
+    thinkingDisplay?: string
+}
+
+function shapeFromSerializedBody(serialized: string): CapturedRequestShape {
     try {
-        const parsed = JSON.parse(serialized) as { model?: unknown }
-        return typeof parsed.model === "string" ? parsed.model : undefined
+        const parsed = JSON.parse(serialized) as {
+            model?: unknown
+            thinking?: { display?: unknown }
+        }
+        return {
+            model: typeof parsed.model === "string" ? parsed.model : undefined,
+            thinkingDisplay:
+                typeof parsed.thinking?.display === "string"
+                    ? parsed.thinking.display
+                    : undefined,
+        }
     } catch {
-        return undefined
+        return {}
     }
 }
 
@@ -331,42 +398,63 @@ function modelFromSerializedBody(serialized: string): string | undefined {
  * authoritative for feature betas, so betas for future pi features cannot be
  * dropped by this extension.
  */
-export function mergeCapturedBetas(headers: Headers, model?: string): void {
+export function mergeCapturedBetas(
+    headers: Headers,
+    request: string | CapturedRequestShape | undefined = {},
+): void {
+    const shape =
+        typeof request === "string" ? { model: request } : (request ?? {})
     const current = headers.get("anthropic-beta")
     const betas = (current ?? "")
         .split(",")
         .map((entry) => entry.trim())
         .filter((entry) => entry.length > 0)
-    for (const beta of capturedBetasForModel(model)) {
+    for (const beta of capturedBetasFor(shape)) {
         if (!betas.includes(beta)) betas.push(beta)
     }
     headers.set("anthropic-beta", betas.join(","))
 }
 
-/** Current live-captured Claude Code betas, including model-gated entries. */
-function capturedBetasForModel(model: string | undefined): string[] {
+/**
+ * Current live-captured Claude Code betas for one request, including
+ * model-gated entries. Shared by the fetch merge path and
+ * `scripts/verify-fingerprint.ts` so offline compare cannot drift from what
+ * production would emit for the same model.
+ *
+ * Fallback betas (`server-side-fallback`, `fallback-credit`) are omitted: native
+ * 2.1.278 sdk-cli main requests do not send them (they ride with a `fallbacks`
+ * body field on auxiliary traffic only). Advertising them without that field is
+ * something native never does; Pi also strips `fallbacks` on OAuth.
+ */
+export function capturedBetasFor(request: CapturedRequestShape): string[] {
     const betas = CLAUDE_CODE_BETAS.split(",")
-    if (!model) return betas
+    const model = request.model
 
-    const afterSystem = betas.indexOf("mid-conversation-system-2026-04-07") + 1
-    const systemBetas: string[] = []
-    if (FABLE_5_1_MODEL.test(model)) {
-        systemBetas.push("per-turn-control-2026-07-01")
+    if (model) {
+        const afterSystem =
+            betas.indexOf("mid-conversation-system-2026-04-07") + 1
+        const systemBetas: string[] = []
+        if (FABLE_5_1_MODEL.test(model)) {
+            systemBetas.push("per-turn-control-2026-07-01")
+        }
+        if (MID_CONVERSATION_TOOL_CHANGE_MODEL.test(model)) {
+            systemBetas.push("mid-conversation-tool-changes-2026-07-01")
+        }
+        betas.splice(afterSystem, 0, ...systemBetas)
     }
-    if (MID_CONVERSATION_TOOL_CHANGE_MODEL.test(model)) {
-        systemBetas.push("mid-conversation-tool-changes-2026-07-01")
-    }
-    betas.splice(afterSystem, 0, ...systemBetas)
 
-    const afterEffort = betas.indexOf("effort-2025-11-24") + 1
-    const fallbackBetas: string[] = []
-    if (FABLE_5_1_MODEL.test(model)) {
-        fallbackBetas.push("server-side-fallback-2026-06-01")
+    if (request.thinkingDisplay === THINKING_DISPLAY_UPDATES) {
+        const afterEffort = betas.indexOf("effort-2025-11-24") + 1
+        const at = betas.indexOf(DISPLAY_UPDATES_BETA)
+        if (at < 0) {
+            betas.splice(
+                afterEffort > 0 ? afterEffort : betas.length,
+                0,
+                DISPLAY_UPDATES_BETA,
+            )
+        }
     }
-    if (FALLBACK_CREDIT_MODEL.test(model)) {
-        fallbackBetas.push("fallback-credit-2026-06-01")
-    }
-    betas.splice(afterEffort, 0, ...fallbackBetas)
+
     return betas
 }
 
@@ -385,7 +473,9 @@ function insertBeta(headers: Headers, beta: string): void {
 
 /**
  * Close the remaining client-identity gaps between pi's SDK and Claude Code:
- * Stainless version/timeout/runtime headers plus the model-gated 1M beta.
+ * Stainless version/timeout/runtime headers, main request-class, and the
+ * model-gated 1M beta. `x-cc-atis` is deliberately omitted — wrong/stale pin is
+ * worse than none (see docs/HANDOFF-2.1.278-SDK-CLI.md).
  */
 export function applyClaudeCodeHeaderFidelity(
     headers: Headers,
@@ -394,10 +484,10 @@ export function applyClaudeCodeHeaderFidelity(
     headers.set("x-stainless-package-version", CC_SDK_PACKAGE_VERSION)
     headers.set("x-stainless-timeout", CC_STAINLESS_TIMEOUT)
     headers.set("x-stainless-runtime-version", CC_RUNTIME_VERSION)
-    if (
-        serializedBody !== undefined &&
-        supportsLongContextBeta(modelFromSerializedBody(serializedBody))
-    ) {
+    headers.set("x-claude-code-request-class", CC_REQUEST_CLASS)
+    if (serializedBody === undefined) return
+    const shape = shapeFromSerializedBody(serializedBody)
+    if (supportsLongContextBeta(shape.model)) {
         insertBeta(headers, LONG_CONTEXT_BETA)
     }
 }
@@ -445,8 +535,8 @@ export function installClaudeCodeFetchPatch(): void {
         mergeCapturedBetas(
             headers,
             serializedBody === undefined
-                ? undefined
-                : modelFromSerializedBody(serializedBody),
+                ? {}
+                : shapeFromSerializedBody(serializedBody),
         )
         // Re-assert the user-agent per request. The provider registration sets
         // it once at extension load, so a Claude Code update mid-session would
