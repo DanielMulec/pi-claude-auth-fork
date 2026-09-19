@@ -1,3 +1,11 @@
+# Canonical line
+
+Source of truth for this repo: commit `3df2adb` — **v0.7.1**, Claude Code **2.1.274** fingerprint.
+
+- Work from current `main` / `HEAD` as the live tree.
+- Move git refs (pull, fast-forward, merge, rebase, reset, push) only when the user asks.
+- Explore alternate history, extra refs, or paths outside this repo only when the user names a specific ref or path.
+
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
