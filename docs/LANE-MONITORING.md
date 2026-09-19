@@ -5,6 +5,11 @@ against the Claude Pro/Max **plan windows** rather than per-token **extra usage
 (usage credits)**. Which entitlement pays is decided server-side by an
 undocumented classifier that has changed repeatedly (Apr 4, Apr 8, Jun 15 2026) — so the billing is verified **empirically**, not assumed.
 
+**Classifier / identity contingency** (dormant; production stays `sdk-cli`):
+[CLAUDE-OAUTH-CONTINGENCY.md](./CLAUDE-OAUTH-CONTINGENCY.md). Tiny `lane:check`
+probes can be **false green** — a real Pi wire capture is the acceptance fixture
+when diagnosing third-party routing.
+
 > Anthropic's own vocabulary, used throughout: **unified rate limits** (the
 > `anthropic-ratelimit-unified-*` response headers), **session window** (5h),
 > **weekly window** (7d), **overage**, and **extra usage** with **used

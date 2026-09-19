@@ -209,7 +209,11 @@ pi update npm:@pankajudhas81/pi-claude-auth
 
 See [docs/LANE-MONITORING.md](docs/LANE-MONITORING.md) for the billing
 check (`pnpm run lane:check`), the consumed-usage report (`pnpm run usage`),
-and the re-check cadence.
+and the re-check cadence. If Anthropic starts treating SDK-shaped traffic as
+extra usage, see the dormant plan in
+[docs/CLAUDE-OAUTH-CONTINGENCY.md](docs/CLAUDE-OAUTH-CONTINGENCY.md) — do not
+flip to interactive `cli` identity while Pi's system prompt is still in
+`system[]`.
 
 ### Monitoring usage
 
