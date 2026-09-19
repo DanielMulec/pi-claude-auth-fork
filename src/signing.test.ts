@@ -9,7 +9,9 @@ import {
     buildUserAgent,
     CLAUDE_CODE_BETAS,
     CC_REQUEST_CLASS,
+    CC_ENTRYPOINT,
     CC_SDK_PACKAGE_VERSION,
+    CC_TURN_ORIGIN,
     computeCchFromBody,
     computeVersionSuffix,
     extractFirstUserMessageText,
@@ -349,19 +351,19 @@ test("supportsLongContextBeta: catalog windows", () => {
     assert.equal(supportsLongContextBeta(undefined), false)
 })
 
-test("buildBillingHeaderValue: 2.1.277 live interactive shape", () => {
-    // Native 2.1.277, `claude-sonnet-5`, prompt "Reply with exactly: OK":
-    // cc_version=2.1.277.b25; cc_entrypoint=cli; cch=...; cc_prompt_id=...;
-    // cc_turn_origin=human;
+test("buildBillingHeaderValue: 2.1.277 live sdk-cli shape", () => {
+    // Native 2.1.277 `--print`, `claude-sonnet-5`, prompt "Reply with exactly:
+    // OK": cc_version=2.1.277.b25; cc_entrypoint=sdk-cli; cch=...;
+    // cc_prompt_id=...; cc_turn_origin=sdk;
     const header = buildBillingHeaderValue(
         [{ role: "user", content: "Reply with exactly: OK" }],
         "2.1.277",
-        "cli",
+        "sdk-cli",
         "6d3eeb40-a69c-4013-a9d5-5cf59b1923ac",
     )
     assert.equal(
         header,
-        "x-anthropic-billing-header: cc_version=2.1.277.b25; cc_entrypoint=cli; cch=00000; cc_prompt_id=6d3eeb40-a69c-4013-a9d5-5cf59b1923ac; cc_turn_origin=human;",
+        "x-anthropic-billing-header: cc_version=2.1.277.b25; cc_entrypoint=sdk-cli; cch=00000; cc_prompt_id=6d3eeb40-a69c-4013-a9d5-5cf59b1923ac; cc_turn_origin=sdk;",
     )
 })
 
@@ -370,13 +372,13 @@ test("buildBillingHeaderValue: cc_prev_req precedes cc_prompt_id", () => {
     const header = buildBillingHeaderValue(
         [{ role: "user", content: "Reply with exactly: OK" }],
         "2.1.277",
-        "cli",
+        "sdk-cli",
         "6d3eeb40-a69c-4013-a9d5-5cf59b1923ac",
         "req_capture_0001",
     )
     assert.ok(
         header.includes(
-            "cch=00000; cc_prev_req=req_capture_0001; cc_prompt_id=6d3eeb40-a69c-4013-a9d5-5cf59b1923ac; cc_turn_origin=human;",
+            "cch=00000; cc_prev_req=req_capture_0001; cc_prompt_id=6d3eeb40-a69c-4013-a9d5-5cf59b1923ac; cc_turn_origin=sdk;",
         ),
     )
 })
@@ -388,7 +390,7 @@ test("cc_prev_req: only well-formed request ids are replayed", () => {
         buildBillingHeaderValue(
             [{ role: "user", content: "Reply with exactly: OK" }],
             "2.1.277",
-            "cli",
+            "sdk-cli",
             "6d3eeb40-a69c-4013-a9d5-5cf59b1923ac",
         ).includes("cc_prev_req"),
         false,
@@ -398,7 +400,7 @@ test("cc_prev_req: only well-formed request ids are replayed", () => {
         buildBillingHeaderValue(
             [{ role: "user", content: "Reply with exactly: OK" }],
             "2.1.277",
-            "cli",
+            "sdk-cli",
             "6d3eeb40-a69c-4013-a9d5-5cf59b1923ac",
         ).includes("cc_prev_req=req_abc123;"),
     )
@@ -482,13 +484,23 @@ test("buildUserAgent: default Claude Code form", () => {
     // Injected so the assertion does not depend on which Claude Code release
     // happens to be installed on the machine running the tests.
     process.env.ANTHROPIC_CLI_VERSION = "2.1.267"
-    assert.equal(buildUserAgent(), "claude-cli/2.1.267 (external, cli)")
+    assert.equal(buildUserAgent(), "claude-cli/2.1.267 (external, sdk-cli)")
 })
 
 test("buildUserAgent: version tracks ANTHROPIC_CLI_VERSION", () => {
     delete process.env.ANTHROPIC_USER_AGENT
     delete process.env.CLAUDE_CODE_ENTRYPOINT
     process.env.ANTHROPIC_CLI_VERSION = "2.1.270"
-    assert.equal(buildUserAgent(), "claude-cli/2.1.270 (external, cli)")
+    assert.equal(buildUserAgent(), "claude-cli/2.1.270 (external, sdk-cli)")
     assert.match(computeVersionSuffix("say hi", "2.1.270"), /^f7f$/)
+})
+
+test("entrypoint, identity and turn origin stay consistent", () => {
+    // Regression guard for the v0.8.0 regression: the classifier rejects a
+    // claimed interactive entrypoint carrying a foreign system prompt, and the
+    // failure is a request-time 400, not a failing test. Keep the three halves of
+    // the claim — entrypoint, identity line, turn origin — locked together.
+    assert.equal(CC_ENTRYPOINT, "sdk-cli")
+    assert.equal(CC_TURN_ORIGIN, "sdk")
+    assert.ok(buildUserAgent().endsWith("(external, sdk-cli)"))
 })

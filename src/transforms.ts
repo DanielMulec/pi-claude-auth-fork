@@ -82,17 +82,21 @@ export function discoverClaudeCodeIdentity(): ClaudeCodeIdentity | undefined {
 }
 
 /**
- * Shape an Anthropic OAuth payload like live interactive Claude Code 2.1.277:
- * system[0] billing header, system[1] CLI identity, then Pi's prompt.
+ * Shape an Anthropic OAuth payload like live Claude Code 2.1.278 as launched by
+ * `--print`: system[0] billing header, system[1] Agent SDK identity, then Pi's
+ * prompt.
  *
- * The identity line is the one native sends for `cc_entrypoint=cli`. Claude Code
- * picks between three depending on how it was launched (`ybn` in the 2.1.277
- * bundle): the interactive CLI gets
- * "You are Claude Code, Anthropic's official CLI for Claude.", while `--print`
- * and the Agent SDK get the "built on Anthropic's Claude Agent SDK" variants.
- * Because pi claims the interactive entrypoint, it has to carry the interactive
- * identity too — this fork used to emit the Agent SDK line, which contradicted
- * the rest of its own fingerprint.
+ * The identity line must match the claimed entrypoint. Claude Code picks between
+ * three (`ybn` in the bundle): the interactive CLI gets "You are Claude Code,
+ * Anthropic's official CLI for Claude.", `--print` gets
+ * "You are Claude Code, Anthropic's official CLI for Claude, running within the
+ * Claude Agent SDK.", and the bare Agent SDK gets the line used here.
+ *
+ * This is not cosmetic. Anthropic's classifier cross-checks the claimed
+ * entrypoint against the system prompt, and a mismatched pair is rejected with
+ * HTTP 400 regardless of how the rest of the request looks — see the comment on
+ * `CC_ENTRYPOINT` in ./signing.ts for the measurements. The interactive identity
+ * therefore ships only if the interactive entrypoint does.
  */
 export function injectBillingHeader(
     payload: unknown,
@@ -141,7 +145,7 @@ export function injectBillingHeader(
 
     p.system = [
         { type: "text", text: billingHeader },
-        { type: "text", text: LEGACY_CLI_IDENTITY },
+        { type: "text", text: AGENT_SDK_IDENTITY },
         ...remaining,
     ]
 

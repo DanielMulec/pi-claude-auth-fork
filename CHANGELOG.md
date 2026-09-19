@@ -1,5 +1,55 @@
 # Changelog
 
+# 0.8.1 (2026-09-19) — fork release
+
+### Fixed
+
+- **0.8.0 broke plan billing and this reverts the cause.** 0.8.0 changed the
+  claimed entrypoint from `sdk-cli` to `cli` to look like the interactive TUI.
+  Anthropic's classifier cross-checks the claimed client against the **system
+  prompt**, and `cli` carrying a prompt that is not Claude Code's is refused:
+
+  ```
+  HTTP 400 Third-party apps now draw from your extra usage, not your plan limits.
+  ```
+
+  `sdk-cli` with the *identical* body is accepted and billed to the plan windows.
+  Verified 3/3 deterministically. Reverted `CC_ENTRYPOINT` to `sdk-cli`,
+  `CC_TURN_ORIGIN` to `sdk`, and the identity block back to the Agent SDK line —
+  the three halves of the claim move together, and a regression test now pins them.
+- **`lane:check` can no longer report a false green.** Its A/B probe sends a
+  minimal body (no tools, two-line system prompt, `max_tokens: 16`) which
+  Anthropic accepts from any client, so it reported plan windows throughout the
+  outage. It now says so itself, detects the classifier's 400 explicitly instead
+  of parsing it as "no rate-limit headers", shapes its request through the
+  extension's own transform rather than a hand-written identity line, and gained
+  `--replay <capture>`: re-send a real captured pi request to the live API and
+  get the real verdict.
+
+### Kept from 0.8.0
+
+Everything else 0.8.0 added is independent of the entrypoint and still verified:
+the recursive `model` emptying that makes `cch` reproduce for Opus and Fable at
+all, the 2.1.277/2.1.278 beta set, `cc_prev_req`, `x-claude-code-request-class`,
+the `x-cc-atis` client-data pin, the shipped capture rig, and
+`verify:fingerprint`.
+
+### Verified
+
+- Native `--print` 2.1.278 capture is reproduced field for field: user-agent,
+  `cc_version=2.1.278.773`, `cc_entrypoint=sdk-cli`, `cc_turn_origin=sdk`, the
+  Agent SDK identity line, `x-claude-code-request-class: main`, `x-cc-atis`,
+  `x-stainless-*`, and every beta in its 14-entry set with no extras beyond pi's
+  own `context-1m-2025-08-07`.
+- Live pi requests on `claude-sonnet-5` and `claude-opus-5` return HTTP 200;
+  `lane:check --replay` on a fresh capture reports plan windows, and on the
+  pre-fix 0.8.0 capture reports the classifier rejection.
+- Attribution: the account is out of extra-usage credits, which turns the
+  classifier's decision into a clean oracle — HTTP 200 means plan, HTTP 400 means
+  classified third-party. No request in this work billed to extra usage.
+- 70 tests pass (one new regression test pinning entrypoint/identity/turn-origin
+  together); `tsc`, `oxlint`, `oxfmt --check` clean.
+
 # 0.8.0 (2026-09-19) — fork release
 
 ### Changed

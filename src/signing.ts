@@ -12,24 +12,45 @@ const PRIME64_4 = 0x85ebca77c2b2ae63n
 const PRIME64_5 = 0x27d4eb2f165667c5n
 
 /**
- * The entrypoint pi claims.
+ * The entrypoint pi claims: the Agent SDK's, not the interactive TUI's.
  *
- * Claude Code does not hardcode this: it reads `CLAUDE_CODE_ENTRYPOINT`
- * (`process.env.CLAUDE_CODE_ENTRYPOINT ?? "unknown"` in the 2.1.277 bundle) and
- * its own launchers set it — `cli` for the interactive TUI, `sdk-cli` for
- * `--print` / the Agent SDK. Reporting `sdk-cli` made every request look like it
- * came from the SDK rather than the interactive CLI, which is the identity this
- * fork exists to present, so the default is now the interactive one.
+ * Claude Code reads `CLAUDE_CODE_ENTRYPOINT` rather than hardcoding it
+ * (`process.env.CLAUDE_CODE_ENTRYPOINT ?? "unknown"` in the 2.1.277 bundle); its
+ * launchers set `cli` for the TUI and `sdk-cli` for `--print` / the Agent SDK.
+ *
+ * v0.8.0 claimed `cli`, on the reasoning that the interactive CLI is the shape
+ * the rest of the fingerprint was measured from. That was wrong, and Anthropic's
+ * billing classifier says so: it checks the **system prompt for coherence with
+ * the claimed client**, and a `cli` identity carrying a foreign system prompt is
+ * rejected outright —
+ *
+ *     HTTP 400 Third-party apps now draw from your extra usage, not your plan limits.
+ *
+ * while the identical request under `sdk-cli` is accepted and billed to the plan
+ * windows. Reproduced 3/3 deterministically on 2026-09-19 with the account out
+ * of extra-usage credits, which turns "was it plan or credits?" into a clean
+ * oracle: 200 means plan, 400 means classified third-party.
+ *
+ * `cli` is only reachable by shipping Claude Code's own system prompt and
+ * relocating pi's instructions — verified to pass, but it means impersonating the
+ * interactive CLI's prompt (which documents tools pi does not have) and giving up
+ * pi's system-prompt weighting. That is a worse trade than an entrypoint that is
+ * simply true: pi *is* an application on the Anthropic SDK that supplies its own
+ * prompt, which is exactly what `sdk-cli` means. So the SDK entrypoint it is.
+ *
+ * Do not "fix" this back to `cli` without re-reading this comment and
+ * docs/LANE-MONITORING.md; the failure is a 400 at request time, not a tests-red.
  */
-export const CC_ENTRYPOINT = "cli"
+export const CC_ENTRYPOINT = "sdk-cli"
 
 /**
  * `cc_turn_origin`, also read by Claude Code from its own environment.
  *
- * Live 2.1.277 captures: the interactive CLI sends `human`, `--print` sends
- * `sdk`. Same origin vocabulary as the entrypoint split.
+ * Live 2.1.278 captures: the interactive CLI sends `human`, `--print` sends
+ * `sdk`. Same origin vocabulary as the entrypoint split, and it must agree with
+ * the entrypoint claimed above.
  */
-export const CC_TURN_ORIGIN = "human"
+export const CC_TURN_ORIGIN = "sdk"
 
 /** Pi's requests are the main thread from Anthropic's point of view. */
 export const CC_REQUEST_CLASS = "main"

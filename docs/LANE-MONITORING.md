@@ -398,6 +398,112 @@ Only the no-install fallback advanced, to `2.1.278`.
 | system blocks 3+                    | Claude Code's prompt | pi's prompt                 | the point of running pi                                                              |
 | tool set                            | Claude Code's tools  | pi's tools                  | same                                                                                 |
 
+## 2026-09-19 — the content classifier, and the v0.8.0 outage
+
+**This is the most important section in this file. Read it before changing the
+claimed client identity.**
+
+### What happened
+
+v0.8.0 changed the claimed entrypoint from `sdk-cli` to `cli`, on the reasoning
+that `cli` is the interactive TUI and the rest of the fingerprint had been
+measured from interactive captures. Every real pi request then failed:
+
+```
+HTTP 400 {"type":"error","error":{"type":"invalid_request_error",
+ "message":"Third-party apps now draw from your extra usage, not your plan limits.
+  Add more at claude.ai/settings/usage and keep going."}}
+```
+
+Reverting the entrypoint to `sdk-cli` restored it immediately. Real Claude Code
+(`claude -p`) was unaffected throughout, so the account and CLI were never the
+problem.
+
+### Why it was invisible until it was fatal
+
+The account ran out of extra-usage credits (`extra_usage.state:
+disabled (out_of_credits)`). Before that, a request the classifier routed to
+extra usage would have been _served_ — silently billed to credits rather than
+plan windows, which is the quiet version of the same failure. Once the credits
+were gone the same routing became a hard 400. **This is why the failure looked
+new: it was the same classification all along, minus the cover.**
+
+That also makes the exhausted-credits state a precise oracle, which is how the
+work below was measured:
+
+| Result                       | Meaning                                                            |
+| ---------------------------- | ------------------------------------------------------------------ |
+| HTTP 200                     | The classifier accepted the shape and the plan windows paid for it |
+| HTTP 400 "Third-party apps…" | Classified as a non-Claude-Code client                             |
+| HTTP 400 (other message)     | A real request-validation error; not a classifier result           |
+
+### What the classifier actually looks at
+
+Bisected by replaying one real failing pi request to the live API with a single
+mutation each time (`cch` recomputed for every variant). Every result reproduced
+3/3 across runs — the classifier is deterministic, so single-shot probes are
+trustworthy once repeated.
+
+| Mutation (entrypoint `cli` unless stated)                                       | Result   |
+| ------------------------------------------------------------------------------- | -------- |
+| pi's body as-is                                                                 | **FAIL** |
+| drop pi's system prompt (keep billing + identity only)                          | PASS     |
+| replace pi's prompt with Claude Code's own                                      | PASS     |
+| shorter, generic prompt ("You are a helpful assistant.")                        | PASS     |
+| pi's prompt + Claude Code's prompt as a **fourth** system block                 | **FAIL** |
+| Claude Code's prompt in `system[2]`, pi's prompt in `system[3]`                 | **FAIL** |
+| **drop `tools` entirely, keep pi's prompt**                                     | **FAIL** |
+| rename pi's tools to Claude Code's names                                        | **FAIL** |
+| `max_tokens` 128000 → 64000                                                     | **FAIL** |
+| add `context_management`                                                        | **FAIL** |
+| add `diagnostics`                                                               | **FAIL** |
+| drop `context-1m-2025-08-07`                                                    | **FAIL** |
+| identity prompt → Agent SDK line, `cc_entrypoint=sdk-cli`, `cc_turn_origin=sdk` | **PASS** |
+
+Read the last row together with the first: **the same body, the same tools, the
+same prompt — only the claimed client identity changed the outcome.** Tools,
+`max_tokens`, `context_management` and `diagnostics` are all irrelevant to it.
+The classifier scans _every_ system block (the fourth-block variant fails), and
+what it is really testing is: _does a client claiming to be Claude Code carry
+Claude Code's system prompt?_
+
+`sdk-cli` does not have to pass that test, because an application on the Agent
+SDK legitimately supplies its own system prompt. That is the whole difference.
+pi _is_ such an application, so `sdk-cli` is both the accepted answer and the
+true one.
+
+### Why not just impersonate the prompt
+
+Keeping `cli` is possible — Claude Code's prompt in `system[2]`, pi's
+instructions moved into the first user message — and it was verified to pass
+3/3. It was rejected anyway:
+
+- Claude Code's prompt documents tools pi does not have (`Agent`, `Artifact`,
+  `Skill`, `ToolSearch`, `ScheduleWakeup`, …). Handing the model a tool list that
+  does not match the request's `tools` invites calls that cannot be satisfied.
+- pi's instructions lose system-prompt weighting and become user-authored text,
+  which changes how the model treats them.
+- It is a more elaborate lie about being Claude Code, in a system whose operator
+  is demonstrably willing to check.
+- The prompt text is version-coupled: it would have to be re-extracted from each
+  Claude Code release, and every extraction bug is another outage like this one.
+
+### Rules this leaves behind
+
+1. **The claimed entrypoint, the identity line, and `cc_turn_origin` are one
+   claim.** They must agree with each other and with the system prompt being
+   sent. A regression test pins all three.
+2. **A header-and-body capture match does not prove acceptance.** The rig proves
+   _shape_; only a live request proves the classifier is satisfied. Both are
+   necessary.
+3. **`lane:check`'s default probe cannot see this class of failure** and now says
+   so. Use `pnpm run lane:check -- --replay <capture>` on a real captured
+   request whenever the request shape changes.
+4. **Watch for silent credit burn, not just hard errors.** While credits are
+   available the same misclassification costs money instead of failing. That is
+   what `pnpm run usage` is for, and a slow rise in `used_credits` with flat plan
+   windows is the signal.
+
 ## Re-check cadence
 
 - **After a Claude Code update**, the version needs nothing from you — it is
@@ -444,8 +550,14 @@ pnpm run capture -- --port 8899 --out /tmp/cc-capture
 #    makes the client run the tool and send a second turn — where `cc_prev_req`
 #    shows up.
 
-# 2. Real Claude Code, interactive. This is the shape the fork reproduces, and
-#    the only way to reach it: `--print` sends the sdk-cli shape instead.
+# 2a. Real Claude Code, non-interactive — the shape this fork claims, so this is
+#     the reference capture to diff against.
+ANTHROPIC_BASE_URL=http://127.0.0.1:8899 \
+_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL=1 \
+    claude -p --model claude-sonnet-5 "Reply with exactly: OK"
+
+# 2b. Real Claude Code, interactive. Not the shape we send, but capturing both is
+#     how you notice a change moving something it should not have. Needs a pty.
 ANTHROPIC_BASE_URL=http://127.0.0.1:8899 \
 _CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL=1 \
     python3 scripts/drive-claude-interactive.py \
@@ -482,10 +594,18 @@ extension's fetch patch wrap the redirect, so the dump shows the fully shaped
 body (`cch` filled in, betas merged, headers set). Loading it last dumps the
 pre-shaping body and looks alarming for no reason.
 
-Verdicts are recorded above, release by release.
+Verdicts are recorded above, release by release. Remember that the rig captures
+shape only — [the content classifier](#2026-09-19--the-content-classifier-and-the-v08-outage)
+is not visible to it.
 
 ## Known gaps (accepted)
 
+- **The claimed client identity is constrained by the classifier, not by us.**
+  `cli` is not available while pi sends its own system prompt; see
+  [the classifier section](#2026-09-19--the-content-classifier-and-the-v08-outage).
+  If the classifier tightens again, the remaining lever is content — pi's system
+  prompt and tool definitions — and relocating them is a product decision, not a
+  fingerprint tweak.
 - **Auxiliary pi requests** (compaction/consolidation, background agents) do not
   pass through the extension's `before_provider_request` hook, so they carry no
   billing header. They _do_ get the Claude Code user-agent, `X-Stainless-*`

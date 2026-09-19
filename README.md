@@ -3,7 +3,7 @@
 > **Fork status (v0.8.0):** maintained fork of upstream `pi-claude-auth@0.1.3` (last upstream release 2026-06-04).
 > Changes vs upstream:
 >
-> - **The fingerprint is the _interactive_ Claude Code CLI, not the Agent SDK** — `cc_entrypoint=cli`, the CLI identity prompt, `cc_turn_origin=human`, `cc_prev_req`, `x-claude-code-request-class`, and Claude Code's cached `x-cc-atis` pin. Claude Code reads its entrypoint from `CLAUDE_CODE_ENTRYPOINT`, so `sdk-cli` (what `--print` and the Agent SDK send) was a self-inflicted tell rather than a requirement
+> - **The fingerprint is the Agent SDK entrypoint (`cc_entrypoint=sdk-cli`), not the interactive TUI's** — plus the matching identity prompt, `cc_turn_origin=sdk`, `cc_prev_req`, `x-claude-code-request-class`, and Claude Code's cached `x-cc-atis` pin. Claude Code reads its entrypoint from `CLAUDE_CODE_ENTRYPOINT`, and v0.8.0 briefly claimed `cli`; that turned out to be the one thing Anthropic's classifier refuses when the system prompt is not Claude Code's own, so it was reverted in 0.8.1. See [docs/LANE-MONITORING.md](docs/LANE-MONITORING.md) before changing it again.
 > - **Claude Code version is read from the installation, not pinned** — the release number is resolved from `~/.local/share/claude/versions` on every request, so a Claude Code update needs no change here. `ANTHROPIC_CLI_VERSION` remains a manual override, and a constant covers machines with no Claude Code installed (announced on stderr when used)
 > - **`cch` verified through live Claude Code 2.1.277** — the recovered seed (`4d659218e32a3268`) plus Claude Code's hash view (every `model` string emptied at any depth, dropped `max_tokens`/`fallback_credit_token`) reproduces native `cch` on 23 live captures. The recursive `model` emptying is what makes Opus and Fable reproduce: they repeat the model id inside the `advisor` tool
 > - **The current beta fingerprint is merged into pi's, never substituted for it** — the 2.1.277 capture confirms the common set and Fable 5.1 / Opus 5 model-gated betas, while preserving every beta pi derives from model compatibility flags
@@ -264,15 +264,15 @@ write-back is enabled by default to keep your stored credentials valid.
 
 ## Environment variables
 
-| Variable                 | Description                                                                                                                            | Default            |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| `PI_CODING_AGENT_DIR`    | pi's config directory (where `auth.json` lives)                                                                                        | `~/.pi/agent`      |
-| `PI_CLAUDE_AUTH_DEBUG`   | Enable diagnostic logging (`1` for default path, or a custom file path)                                                                | disabled           |
-| `ANTHROPIC_CLI_VERSION`  | Claude CLI version for billing headers (default: the installed Claude Code)                                                            | —                  |
-| `ANTHROPIC_CCH_SEED`     | 64-bit hex seed for structure-aware `cch` (native seed rotates)                                                                        | `4d659218e32a3268` |
-| `CLAUDE_CODE_ENTRYPOINT` | Entrypoint this extension claims. Claude Code reads the same variable; its launchers set `cli` for the TUI and `sdk-cli` for `--print` | `cli`              |
-| `ANTHROPIC_USER_AGENT`   | Full user-agent override, bypassing the assembled Claude Code form                                                                     | —                  |
-| `CLAUDE_CONFIG_DIR`      | Where `.claude.json` lives, for the `x-cc-atis` client-data lookup                                                                     | `~`                |
+| Variable                 | Description                                                                                                                                                                                                                                                     | Default            |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| `PI_CODING_AGENT_DIR`    | pi's config directory (where `auth.json` lives)                                                                                                                                                                                                                 | `~/.pi/agent`      |
+| `PI_CLAUDE_AUTH_DEBUG`   | Enable diagnostic logging (`1` for default path, or a custom file path)                                                                                                                                                                                         | disabled           |
+| `ANTHROPIC_CLI_VERSION`  | Claude CLI version for billing headers (default: the installed Claude Code)                                                                                                                                                                                     | —                  |
+| `ANTHROPIC_CCH_SEED`     | 64-bit hex seed for structure-aware `cch` (native seed rotates)                                                                                                                                                                                                 | `4d659218e32a3268` |
+| `CLAUDE_CODE_ENTRYPOINT` | Entrypoint this extension claims. Claude Code reads the same variable; its launchers set `cli` for the TUI and `sdk-cli` for `--print`. Do not set this to `cli` without relocating pi's system prompt — see [docs/LANE-MONITORING.md](docs/LANE-MONITORING.md) | `sdk-cli`          |
+| `ANTHROPIC_USER_AGENT`   | Full user-agent override, bypassing the assembled Claude Code form                                                                                                                                                                                              | —                  |
+| `CLAUDE_CONFIG_DIR`      | Where `.claude.json` lives, for the `x-cc-atis` client-data lookup                                                                                                                                                                                              | `~`                |
 
 ## How it works
 
@@ -346,10 +346,22 @@ _CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL=1 \
 pnpm run verify:fingerprint /tmp/cc-capture --prompt "Reply with exactly: OK"
 ```
 
-Step 2 is the part that matters. `claude -p` is _not_ a substitute: `--print`
-sends `cc_entrypoint=sdk-cli`, the Agent SDK identity line, and
-`cc_turn_origin=sdk`. Only the TUI sends the interactive shape this fork
-reproduces, and reaching the TUI needs a pty.
+`scripts/drive-claude-interactive.py` drives the real TUI over a pty, which is
+the only way to observe the _interactive_ shape (`cc_entrypoint=cli`, the CLI
+identity line). It is kept because comparing the two shapes is how you notice
+that a change moved something it should not have — but the shape this fork
+actually sends is the `--print` one, so `claude -p` is the reference capture:
+
+```bash
+ANTHROPIC_BASE_URL=http://127.0.0.1:8899 \
+_CLAUDE_CODE_ASSUME_FIRST_PARTY_BASE_URL=1 \
+    claude -p --model claude-sonnet-5 "Reply with exactly: OK"
+```
+
+Headers and body shape being equal is necessary but **not sufficient** — Anthropic
+also classifies the request content, and a green result from the rig says nothing
+about that. Only `pnpm run lane:check -- --replay <capture>` sends a real shaped
+request to the live API and shows the verdict.
 
 To capture pi's side through the same server:
 
