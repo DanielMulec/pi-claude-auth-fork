@@ -1,5 +1,67 @@
 # Changelog
 
+# 0.7.4 (2026-09-28) — fork release
+
+### Changed
+
+- **Verified Claude Code 2.1.284 `sdk-cli` fingerprint** while keeping the coherent
+  Agent SDK persona. Installed-version discovery stays primary; `FALLBACK_CC_VERSION`
+  is `2.1.284`.
+- **Billing header** gains native first-turn `cc_prompt_index=0; cc_turn_index=1`
+  after `cc_turn_origin`. Later-turn counters are not tracked (same class of
+  omission as `cc_prev_req`).
+- **Beta delta vs 2.1.283:** drop `advisor-tool-2026-03-01` from the common
+  sdk-cli set (feature-gated; absent from all five live `-p` captures).
+  `claude-sonnet-5-5` gets `per-turn-control` but not mid-conversation tool
+  changes. Still omit `afk-mode` and `dangerous-tool-use`: 2.1.284 defaults bare
+  `-p` to auto mode, but non-auto `-p` (dontAsk/manual/acceptEdits) and Pi do not
+  send the coupled `safeguards` body.
+- Stainless identity, `cch` seed/hash view, and version-suffix algorithm are
+  unchanged. `x-cc-atis` and `anthropic-dispatch-id` stay omitted.
+
+### Verified
+
+- Native `claude -p` 2.1.284 loopback captures (Sonnet 5, Opus 5, Opus 5.5,
+  Fable 5.1, Sonnet 5.5): version suffix `f4f` for `Reply with exactly: OK`;
+  cch values `a3c4c` / `f53b0` / `5e5a4` / `7aca3` / `9615a` recompute exactly
+  under the unchanged seed.
+- Non-auto permission modes drop `afk-mode`, `dangerous-tool-use`, and
+  `safeguards`; billing still has `cc_prompt_index` / `cc_turn_index`.
+- Official 2.1.284 changelog: Sonnet 5.5 (`claude-sonnet-5-5`, 1M context),
+  default auto mode for interactive (and, as captured, bare `-p`). No OAuth
+  token-endpoint change.
+
+# 0.7.3 (2026-09-26) — fork release
+
+### Changed
+
+- **Verified Claude Code 2.1.283 `sdk-cli` fingerprint** while keeping the coherent
+  Agent SDK persona. Installed-version discovery stays primary; `FALLBACK_CC_VERSION`
+  is `2.1.283`.
+- **Beta delta vs 2.1.278:** stop advertising `afk-mode-2026-01-31` on main traffic
+  (2.1.283 sends it only from auto mode). `claude-opus-5-5` now gets the same
+  per-turn-control gate as Fable 5.1, ahead of mid-conversation tool changes.
+- **`x-claude-code-prompt-id`** is copied from the billing block's `cc_prompt_id`.
+  `anthropic-dangerous-direct-browser-access: true` matches the Claude Code SDK
+  client. `anthropic-dispatch-id` and `x-cc-atis` stay omitted: the first is a
+  remote gate, the second was present on only one of four live captures.
+- **OAuth refresh matches 2.1.283:** `POST https://platform.claude.com/v1/oauth/token`
+  with a JSON body and the issued scope list. Client id is unchanged.
+- **Revoked-token 401:** re-read Keychain/file before refreshing, and replay the
+  request once if a different access token is available. A concurrent Claude Code
+  rotation revokes the access token Pi still holds; refreshing the already-rotated
+  refresh token is worse than adopting the new one.
+
+### Verified
+
+- Native `claude -p` 2.1.283 loopback captures (Sonnet 5, Opus 5, Opus 5.5,
+  Fable 5.1): version suffix `284` for `Reply with exactly: OK`; cch values
+  `f273b` / `2f5ff` / `7eb44` / `f0548` recompute exactly under the unchanged seed.
+- Pi-black's 2.1.280 patch only bumps a version constant. It does not cover the
+  2.1.283 beta, prompt-id, or token-endpoint changes above.
+- Both token hosts still answer `invalid_grant` for a fake refresh token. Native
+  refresh nevertheless uses `platform.claude.com` and `application/json`.
+
 # 0.7.2 (2026-09-19) — fork release
 
 ### Changed

@@ -137,8 +137,60 @@ export function syncAuthJson(creds: ClaudeCredentials): void {
     }
 }
 
-export const OAUTH_TOKEN_URL = "https://claude.ai/v1/oauth/token"
+/** Claude Code 2.1.283 `TOKEN_URL`. The old claude.ai host still answers, but native refresh does not use it. */
+export const OAUTH_TOKEN_URL = "https://platform.claude.com/v1/oauth/token"
 export const OAUTH_CLIENT_ID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+
+/** `dYe()` in Claude Code 2.1.283 when plugins scopes are registered. */
+export const OAUTH_REFRESH_SCOPES = [
+    "user:profile",
+    "user:inference",
+    "user:sessions:claude_code",
+    "user:mcp_servers",
+    "user:file_upload",
+    "user:plugins",
+] as const
+
+export interface OAuthRefreshRequest {
+    url: string
+    headers: { "Content-Type": "application/json" }
+    body: {
+        grant_type: "refresh_token"
+        refresh_token: string
+        client_id: string
+        scope: string
+    }
+}
+
+/** Canonical 2.1.283 order for issued scopes, then any extra stored scopes. */
+export function oauthRefreshScope(stored?: readonly string[]): string {
+    if (!stored || stored.length === 0) return OAUTH_REFRESH_SCOPES.join(" ")
+    const known = new Set(stored)
+    const ordered = OAUTH_REFRESH_SCOPES.filter((scope) => known.has(scope))
+    const extra = stored.filter(
+        (scope) =>
+            !OAUTH_REFRESH_SCOPES.includes(
+                scope as (typeof OAUTH_REFRESH_SCOPES)[number],
+            ),
+    )
+    return (ordered.length > 0 ? [...ordered, ...extra] : [...stored]).join(" ")
+}
+
+export function buildOAuthRefreshRequest(
+    refreshToken: string,
+    scopes?: readonly string[],
+): OAuthRefreshRequest {
+    return {
+        url: OAUTH_TOKEN_URL,
+        headers: { "Content-Type": "application/json" },
+        body: {
+            grant_type: "refresh_token",
+            refresh_token: refreshToken,
+            client_id: OAUTH_CLIENT_ID,
+            scope: oauthRefreshScope(scopes),
+        },
+    }
+}
 
 /**
  * Parse a raw OAuth token response into ClaudeCredentials.
@@ -173,26 +225,33 @@ export function parseOAuthResponse(
 
 export function refreshViaOAuth(
     refreshToken: string,
+    scopes?: readonly string[],
 ): ClaudeCredentials | null {
     // Use a Node subprocess to perform the HTTP request synchronously.
-    // The refresh token is passed via stdin to avoid exposure in process args.
+    // The refresh request is passed via stdin to avoid exposure in process args.
+    // 2.1.283 posts JSON, not a form body, to platform.claude.com.
+    const request = buildOAuthRefreshRequest(refreshToken, scopes)
     const script = `
     process.stdin.resume();
     let input = '';
     process.stdin.on('data', c => input += c);
     process.stdin.on('end', () => {
-      const body = new URLSearchParams({
-        grant_type: 'refresh_token',
-        client_id: '${OAUTH_CLIENT_ID}',
-        refresh_token: input.trim()
-      });
-      fetch('${OAUTH_TOKEN_URL}', {
+      let request;
+      try { request = JSON.parse(input); }
+      catch { process.stdout.write(JSON.stringify({ error: 'bad input' })); process.exit(1); }
+      fetch(request.url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: body.toString()
+        headers: request.headers,
+        body: JSON.stringify(request.body)
       })
-      .then(r => { if (!r.ok) throw new Error(String(r.status)); return r.json(); })
-      .then(d => { process.stdout.write(JSON.stringify(d)); })
+      .then(async r => {
+        const text = await r.text();
+        if (!r.ok) {
+          process.stdout.write(JSON.stringify({ error: String(r.status) }));
+          process.exit(1);
+        }
+        process.stdout.write(text);
+      })
       .catch(e => { process.stdout.write(JSON.stringify({ error: String(e) })); process.exit(1); });
     });
   `
@@ -200,7 +259,7 @@ export function refreshViaOAuth(
     try {
         log("refresh_started", { source: "oauth" })
         const result = execFileSync(process.execPath, ["-e", script], {
-            input: refreshToken,
+            input: JSON.stringify(request),
             timeout: 15_000,
             encoding: "utf-8",
             stdio: ["pipe", "pipe", "ignore"],
@@ -257,14 +316,11 @@ export function refreshIfNeeded(
     const target = account ?? getActiveAccount()
     if (!target) return null
 
-    // Pick up external updates to .credentials.json (e.g. the Claude CLI
-    // refreshing in another process). Bounded by getCachedCredentials's 30s
-    // TTL. macOS keychain sources stay on the in-memory path; their state is
-    // mutated only by our own writeBackCredentials.
-    if (target.source === "file") {
-        const onDisk = refreshAccount(target.source)
-        if (onDisk) target.credentials = onDisk
-    }
+    // Claude Code 2.1.281+ writes rotated tokens to the Keychain, and that
+    // rotation revokes the previous access token immediately. An in-memory
+    // copy is not authoritative for any source.
+    const onDisk = refreshAccount(target.source)
+    if (onDisk) target.credentials = onDisk
 
     const creds = target.credentials
     if (creds.expiresAt > Date.now() + 60_000) return creds
@@ -277,8 +333,9 @@ export function refreshIfNeeded(
 
     // Try direct OAuth refresh first (zero LLM tokens consumed)
     if (creds.refreshToken) {
-        const oauthCreds = refreshViaOAuth(creds.refreshToken)
+        const oauthCreds = refreshViaOAuth(creds.refreshToken, creds.scopes)
         if (oauthCreds && oauthCreds.expiresAt > Date.now() + 60_000) {
+            oauthCreds.scopes ??= creds.scopes
             target.credentials = oauthCreds
             writeBackCredentials(target.source, oauthCreds)
             return oauthCreds
@@ -335,6 +392,76 @@ export function forceRefreshActiveCredentials(): ClaudeCredentials | null {
         })
     }
     return fresh
+}
+
+export interface RevokedRecoveryDeps {
+    readActive: () => { source: string; credentials: ClaudeCredentials } | null
+    reread: (source: string) => ClaudeCredentials | null
+    refresh: (
+        refreshToken: string,
+        scopes?: string[],
+    ) => ClaudeCredentials | null
+    commit: (source: string, creds: ClaudeCredentials) => void
+}
+
+function defaultRevokedRecoveryDeps(): RevokedRecoveryDeps {
+    return {
+        readActive: () => {
+            const account = getActiveAccount()
+            if (!account) return null
+            return { source: account.source, credentials: account.credentials }
+        },
+        reread: (source) => {
+            accountCacheMap.delete(source)
+            return refreshAccount(source)
+        },
+        refresh: (refreshToken, scopes) =>
+            refreshViaOAuth(refreshToken, scopes),
+        commit: (source, creds) => {
+            const account = getActiveAccount()
+            if (account && account.source === source) {
+                account.credentials = creds
+            }
+            writeBackCredentials(source, creds)
+            syncAuthJson(creds)
+            accountCacheMap.set(source, { creds, cachedAt: Date.now() })
+        },
+    }
+}
+
+/**
+ * Recover from `OAuth access token has been revoked` without rotating a token
+ * another process already replaced.
+ *
+ * Re-read storage first. Refresh only when that read still holds the rejected
+ * access token.
+ */
+export function recoverRevokedAccessToken(
+    failedAccessToken: string,
+    deps: RevokedRecoveryDeps = defaultRevokedRecoveryDeps(),
+): string | null {
+    const active = deps.readActive()
+    if (!active) return null
+
+    const external = deps.reread(active.source)
+    const current = external ?? active.credentials
+    if (current.accessToken && current.accessToken !== failedAccessToken) {
+        deps.commit(active.source, current)
+        return current.accessToken
+    }
+    if (!current.refreshToken) return null
+
+    const fresh = deps.refresh(current.refreshToken, current.scopes)
+    if (
+        !fresh ||
+        !fresh.accessToken ||
+        fresh.accessToken === failedAccessToken
+    ) {
+        return null
+    }
+    fresh.scopes ??= current.scopes
+    deps.commit(active.source, fresh)
+    return fresh.accessToken
 }
 
 /**

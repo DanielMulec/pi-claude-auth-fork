@@ -34,6 +34,24 @@ OAuth shape.
 four probes (sonnet-5 and opus-5, pi shape and Claude Code shape), all HTTP 200,
 overage utilization `0.0`, 5h/7d at 1%.
 
+**Fingerprint re-checked 2026-09-28 against Claude Code 2.1.284** (loopback
+`claude -p` only; not a plan-vs-extra-usage oracle). Sonnet 5, Opus 5, Opus 5.5,
+Fable 5.1, and Sonnet 5.5. `cch` seed/hash view and the version-suffix algorithm
+are unchanged (`f4f` for `Reply with exactly: OK`). Billing adds
+`cc_prompt_index=0; cc_turn_index=1`. Common sdk-cli drops `advisor-tool`.
+Bare `-p` now defaults to auto mode (`afk-mode` + `dangerous-tool-use` +
+`safeguards`); non-auto `-p` and this fork omit those. Sonnet 5.5 sends
+`per-turn-control` without mid-conversation tool changes.
+
+**Fingerprint re-checked 2026-09-26 against Claude Code 2.1.283** (loopback
+`claude -p` only; not a plan-vs-extra-usage oracle). Sonnet 5, Opus 5, Opus 5.5,
+and Fable 5.1. `cch` and the version-suffix algorithm are unchanged (`284` for
+`Reply with exactly: OK`). Main sdk-cli traffic no longer sends `afk-mode`.
+Opus 5.5 sends `per-turn-control` plus mid-conversation tool changes. Native
+refresh is JSON to `https://platform.claude.com/v1/oauth/token`. A single Pi
+`401 OAuth access token has been revoked` in an otherwise successful Opus 5.5
+session matched a token rotation race, not a classifier miss.
+
 **Re-verified 2026-09-16 against Claude Code 2.1.273** — see
 [2.1.273 re-verification](#21273-re-verification-2026-09-16). Native and Pi
 loopback captures covered Fable 5.1, Opus 5, and Sonnet 5. Live Pi probes on all

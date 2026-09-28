@@ -9,7 +9,7 @@ Unsupported impersonation of Claude Code. Anthropic may change classification or
 
 ## Current route
 
-Production / canonical line: **v0.7.2** (2.1.278 `sdk-cli` fingerprint; work from `main` / `HEAD`).
+Production / canonical line: **v0.7.4** (2.1.284 `sdk-cli` fingerprint; work from `main` / `HEAD`). A `401` `OAuth access token has been revoked` is an auth-store race, not a classifier trigger — re-read Keychain before refreshing.
 
 | Claim                    | Value                                      |
 | ------------------------ | ------------------------------------------ |

@@ -2,6 +2,7 @@ import assert from "node:assert/strict"
 import { afterEach, test } from "node:test"
 import {
     applyClaudeCodeHeaderFidelity,
+    applyClaudeCodePromptId,
     buildBillingHeaderValue,
     buildUserAgent,
     capturedBetasFor,
@@ -15,6 +16,7 @@ import {
     LONG_CONTEXT_BETA,
     mergeCapturedBetas,
     patchClaudeCodeCch,
+    retryIfOAuthRevoked,
     supportsLongContextBeta,
     THINKING_DISPLAY_UPDATES,
     xxHash64,
@@ -108,6 +110,22 @@ test("computeVersionSuffix: live 2.1.278 capture", () => {
     assert.equal(
         computeVersionSuffix("Reply with exactly: OK", "2.1.278"),
         "773",
+    )
+})
+
+test("computeVersionSuffix: live 2.1.283 sdk-cli capture", () => {
+    // Native claude -p 2.1.283, prompt "Reply with exactly: OK", all four models.
+    assert.equal(
+        computeVersionSuffix("Reply with exactly: OK", "2.1.283"),
+        "284",
+    )
+})
+
+test("computeVersionSuffix: live 2.1.284 sdk-cli capture", () => {
+    // Native claude -p 2.1.284, prompt "Reply with exactly: OK", all five models.
+    assert.equal(
+        computeVersionSuffix("Reply with exactly: OK", "2.1.284"),
+        "f4f",
     )
 })
 
@@ -275,6 +293,10 @@ test("applyClaudeCodeHeaderFidelity: stainless identity + 1M beta", () => {
     assert.equal(headers.get("x-claude-code-request-class"), CC_REQUEST_CLASS)
     assert.equal(headers.has("x-cc-atis"), false)
     assert.equal(
+        headers.get("anthropic-dangerous-direct-browser-access"),
+        "true",
+    )
+    assert.equal(
         headers.get("anthropic-beta"),
         `claude-code-20250219,oauth-2025-04-20,${LONG_CONTEXT_BETA},effort-2025-11-24`,
     )
@@ -342,39 +364,70 @@ test("mergeCapturedBetas: sets the captured set when pi computed none", () => {
     assert.equal(headers.get("anthropic-beta"), CLAUDE_CODE_BETAS)
 })
 
-test("mergeCapturedBetas: 2.1.278 Sonnet 5 captured set", () => {
-    // Live sdk-cli 2.1.278 sonnet: 14 betas, no fallbacks, no display-updates.
-    const headers = new Headers()
-
-    mergeCapturedBetas(headers, {
-        model: "claude-sonnet-5",
-        thinkingDisplay: "omitted",
-    })
-
-    const betas = (headers.get("anthropic-beta") ?? "").split(",")
-    assert.ok(betas.includes("advisor-tool-2026-03-01"))
-    assert.ok(betas.includes("thinking-binding-controls-2026-08-01"))
-    assert.ok(betas.includes("afk-mode-2026-01-31"))
-    assert.ok(!betas.includes("mid-conversation-tool-changes-2026-07-01"))
-    assert.ok(!betas.includes("fallback-credit-2026-06-01"))
-    assert.ok(!betas.includes("thinking-display-updates-2026-08-18"))
+test("capturedBetasFor: 2.1.284 sdk-cli sonnet drops auto-mode betas", () => {
+    // Live non-auto claude -p 2.1.284 (dontAsk/manual/acceptEdits). advisor-tool
+    // is gone from default sdk-cli; afk-mode / dangerous-tool-use are auto-only.
+    assert.deepEqual(
+        capturedBetasFor({
+            model: "claude-sonnet-5",
+            thinkingDisplay: "omitted",
+        }),
+        [
+            "claude-code-20250219",
+            "oauth-2025-04-20",
+            "interleaved-thinking-2025-05-14",
+            "thinking-token-count-2026-05-13",
+            "context-management-2025-06-27",
+            "prompt-caching-scope-2026-01-05",
+            "mid-conversation-system-2026-04-07",
+            "advanced-tool-use-2025-11-20",
+            "effort-2025-11-24",
+            "thinking-binding-controls-2026-08-01",
+            "extended-cache-ttl-2025-04-11",
+            "cache-diagnosis-2026-04-07",
+        ],
+    )
 })
 
-test("mergeCapturedBetas: 2.1.278 Opus 5 model betas", () => {
-    const headers = new Headers()
-
-    mergeCapturedBetas(headers, {
+test("capturedBetasFor: 2.1.284 Opus 5 keeps tool changes, not per-turn", () => {
+    const betas = capturedBetasFor({
         model: "claude-opus-5",
         thinkingDisplay: "omitted",
     })
-
-    const betas = (headers.get("anthropic-beta") ?? "").split(",")
     assert.ok(betas.includes("mid-conversation-tool-changes-2026-07-01"))
-    assert.ok(betas.includes("advisor-tool-2026-03-01"))
     assert.ok(!betas.includes("per-turn-control-2026-07-01"))
-    // Main sdk-cli traffic does not advertise fallback betas.
+    assert.ok(!betas.includes("advisor-tool-2026-03-01"))
+    assert.ok(!betas.includes("afk-mode-2026-01-31"))
+    assert.ok(!betas.includes("dangerous-tool-use-2026-09-03"))
     assert.ok(!betas.includes("server-side-fallback-2026-06-01"))
     assert.ok(!betas.includes("fallback-credit-2026-06-01"))
+})
+
+test("capturedBetasFor: 2.1.284 Opus 5.5 matches Fable per-turn gate", () => {
+    // Live claude -p 2.1.284 claude-opus-5-5. Inserted after mid-conversation-system.
+    const betas = capturedBetasFor({
+        model: "claude-opus-5-5",
+        thinkingDisplay: "omitted",
+    })
+    const system = betas.indexOf("mid-conversation-system-2026-04-07")
+    assert.deepEqual(betas.slice(system, system + 3), [
+        "mid-conversation-system-2026-04-07",
+        "per-turn-control-2026-07-01",
+        "mid-conversation-tool-changes-2026-07-01",
+    ])
+})
+
+test("capturedBetasFor: 2.1.284 Sonnet 5.5 gets per-turn, not tool-changes", () => {
+    const betas = capturedBetasFor({
+        model: "claude-sonnet-5-5",
+        thinkingDisplay: "omitted",
+    })
+    const system = betas.indexOf("mid-conversation-system-2026-04-07")
+    assert.deepEqual(betas.slice(system, system + 2), [
+        "mid-conversation-system-2026-04-07",
+        "per-turn-control-2026-07-01",
+    ])
+    assert.ok(!betas.includes("mid-conversation-tool-changes-2026-07-01"))
 })
 
 test("mergeCapturedBetas: 2.1.278 Fable 5.1 model betas", () => {
@@ -389,11 +442,11 @@ test("mergeCapturedBetas: 2.1.278 Fable 5.1 model betas", () => {
     for (const beta of [
         "per-turn-control-2026-07-01",
         "mid-conversation-tool-changes-2026-07-01",
-        "advisor-tool-2026-03-01",
         "thinking-binding-controls-2026-08-01",
     ]) {
         assert.ok(betas.includes(beta), `missing Fable beta: ${beta}`)
     }
+    assert.ok(!betas.includes("advisor-tool-2026-03-01"))
     assert.ok(!betas.includes("server-side-fallback-2026-06-01"))
     assert.ok(!betas.includes("fallback-credit-2026-06-01"))
 })
@@ -439,22 +492,23 @@ test("capturedBetasFor: matches mergeCapturedBetas model gates", () => {
 test("supportsLongContextBeta: catalog windows", () => {
     assert.equal(supportsLongContextBeta("claude-opus-5"), true)
     assert.equal(supportsLongContextBeta("claude-sonnet-5"), true)
+    assert.equal(supportsLongContextBeta("claude-sonnet-5-5"), true)
     assert.equal(supportsLongContextBeta("claude-haiku-4-5"), false)
     assert.equal(supportsLongContextBeta("claude-opus-4-5"), false)
     assert.equal(supportsLongContextBeta(undefined), false)
 })
 
-test("buildBillingHeaderValue: 2.1.278 live sdk-cli shape", () => {
-    // Native 2.1.278 --print: cc_version; cc_entrypoint; cch; cc_prompt_id; cc_turn_origin=sdk
+test("buildBillingHeaderValue: 2.1.284 live sdk-cli shape", () => {
+    // Native 2.1.284 --print: … cc_prompt_id; cc_turn_origin=sdk; cc_prompt_index=0; cc_turn_index=1
     const header = buildBillingHeaderValue(
         [{ role: "user", content: "Reply with exactly: OK" }],
-        "2.1.278",
+        "2.1.284",
         "sdk-cli",
         "6d3eeb40-a69c-4013-a9d5-5cf59b1923ac",
     )
     assert.equal(
         header,
-        "x-anthropic-billing-header: cc_version=2.1.278.773; cc_entrypoint=sdk-cli; cch=00000; cc_prompt_id=6d3eeb40-a69c-4013-a9d5-5cf59b1923ac; cc_turn_origin=sdk;",
+        "x-anthropic-billing-header: cc_version=2.1.284.f4f; cc_entrypoint=sdk-cli; cch=00000; cc_prompt_id=6d3eeb40-a69c-4013-a9d5-5cf59b1923ac; cc_turn_origin=sdk; cc_prompt_index=0; cc_turn_index=1;",
     )
     assert.equal(CC_TURN_ORIGIN, "sdk")
 })
@@ -474,4 +528,90 @@ test("buildUserAgent: version tracks ANTHROPIC_CLI_VERSION", () => {
     process.env.ANTHROPIC_CLI_VERSION = "2.1.270"
     assert.equal(buildUserAgent(), "claude-cli/2.1.270 (external, sdk-cli)")
     assert.match(computeVersionSuffix("say hi", "2.1.270"), /^f7f$/)
+})
+
+test("applyClaudeCodePromptId: copies cc_prompt_id onto the request header", () => {
+    const headers = new Headers()
+    const promptId = "bc6dde32-cbdc-4210-bc33-4a1c3677bae0"
+    applyClaudeCodePromptId(
+        headers,
+        JSON.stringify({
+            system: [
+                {
+                    type: "text",
+                    text: `x-anthropic-billing-header: cc_version=2.1.283.284; cc_entrypoint=sdk-cli; cch=7eb44; cc_prompt_id=${promptId}; cc_turn_origin=sdk;`,
+                },
+            ],
+            messages: [
+                {
+                    role: "user",
+                    content:
+                        "ignore cc_prompt_id=00000000-0000-4000-8000-000000000000",
+                },
+            ],
+        }),
+    )
+    assert.equal(headers.get("x-claude-code-prompt-id"), promptId)
+})
+
+test("retryIfOAuthRevoked: replays once with a rotated access token", async () => {
+    const revoked = new Response(
+        JSON.stringify({
+            type: "error",
+            error: {
+                type: "authentication_error",
+                message: "OAuth access token has been revoked.",
+            },
+            request_id: null,
+        }),
+        { status: 401 },
+    )
+    const ok = new Response("ok", { status: 200 })
+    let replayed: string | undefined
+    const result = await retryIfOAuthRevoked(
+        revoked,
+        async (accessToken) => {
+            replayed = accessToken
+            return ok
+        },
+        () => "rotated-access",
+    )
+    assert.equal(replayed, "rotated-access")
+    assert.equal(result.status, 200)
+})
+
+test("retryIfOAuthRevoked: does not refresh when the store already rotated", async () => {
+    const revoked = new Response(
+        JSON.stringify({
+            error: { message: "OAuth access token has been revoked." },
+        }),
+        { status: 401 },
+    )
+    let recoveries = 0
+    const result = await retryIfOAuthRevoked(
+        revoked,
+        async () => new Response("nope", { status: 500 }),
+        () => {
+            recoveries++
+            return null
+        },
+    )
+    assert.equal(recoveries, 1)
+    assert.equal(result.status, 401)
+    assert.match(await result.text(), /revoked/)
+})
+
+test("retryIfOAuthRevoked: leaves other 401s alone", async () => {
+    const other = new Response("invalid api key", { status: 401 })
+    let recoveries = 0
+    const result = await retryIfOAuthRevoked(
+        other,
+        async () => new Response("replayed", { status: 200 }),
+        () => {
+            recoveries++
+            return "new"
+        },
+    )
+    assert.equal(recoveries, 0)
+    assert.equal(result, other)
 })

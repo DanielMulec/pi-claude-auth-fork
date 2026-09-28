@@ -4,8 +4,12 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, test } from "node:test"
 import {
+    buildOAuthRefreshRequest,
     loadPersistedAccountSource,
+    OAUTH_CLIENT_ID,
+    OAUTH_TOKEN_URL,
     parseOAuthResponse,
+    recoverRevokedAccessToken,
     saveAccountSource,
     syncAuthJson,
 } from "./credentials.ts"
@@ -110,4 +114,98 @@ test("account source persistence round-trips", () => {
     assert.equal(loadPersistedAccountSource(), null)
     saveAccountSource("Claude Code-credentials")
     assert.equal(loadPersistedAccountSource(), "Claude Code-credentials")
+})
+
+test("buildOAuthRefreshRequest: 2.1.283 JSON token endpoint and scopes", () => {
+    assert.equal(OAUTH_TOKEN_URL, "https://platform.claude.com/v1/oauth/token")
+    assert.deepEqual(buildOAuthRefreshRequest("refresh-token"), {
+        url: "https://platform.claude.com/v1/oauth/token",
+        headers: { "Content-Type": "application/json" },
+        body: {
+            grant_type: "refresh_token",
+            refresh_token: "refresh-token",
+            client_id: OAUTH_CLIENT_ID,
+            scope: "user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload user:plugins",
+        },
+    })
+})
+
+test("buildOAuthRefreshRequest: keeps issued scopes and canonical order", () => {
+    const request = buildOAuthRefreshRequest("refresh-token", [
+        "user:file_upload",
+        "user:inference",
+        "user:plugins",
+        "user:projects:read",
+    ])
+    assert.equal(
+        request.body.scope,
+        "user:inference user:file_upload user:plugins user:projects:read",
+    )
+})
+
+test("recoverRevokedAccessToken: uses a newer stored token and does not refresh", () => {
+    let refreshed = 0
+    let committed = 0
+    const recovered = recoverRevokedAccessToken("old-access", {
+        readActive: () => ({
+            source: "Claude Code-credentials",
+            credentials: {
+                accessToken: "old-access",
+                refreshToken: "old-refresh",
+                expiresAt: 1,
+            },
+        }),
+        reread: () => ({
+            accessToken: "keychain-access",
+            refreshToken: "keychain-refresh",
+            expiresAt: 2,
+        }),
+        refresh: () => {
+            refreshed++
+            return {
+                accessToken: "should-not-run",
+                refreshToken: "x",
+                expiresAt: 3,
+            }
+        },
+        commit: () => {
+            committed++
+        },
+    })
+    assert.equal(recovered, "keychain-access")
+    assert.equal(refreshed, 0)
+    assert.equal(committed, 1)
+})
+
+test("recoverRevokedAccessToken: refreshes only when storage still has the revoked token", () => {
+    const recovered = recoverRevokedAccessToken("revoked-access", {
+        readActive: () => ({
+            source: "file",
+            credentials: {
+                accessToken: "revoked-access",
+                refreshToken: "refresh",
+                expiresAt: 1,
+                scopes: ["user:inference"],
+            },
+        }),
+        reread: () => ({
+            accessToken: "revoked-access",
+            refreshToken: "refresh",
+            expiresAt: 1,
+            scopes: ["user:inference"],
+        }),
+        refresh: (_token, scopes) => {
+            assert.deepEqual(scopes, ["user:inference"])
+            return {
+                accessToken: "fresh-access",
+                refreshToken: "fresh-refresh",
+                expiresAt: 9,
+            }
+        },
+        commit: (_source, creds) => {
+            assert.equal(creds.accessToken, "fresh-access")
+            assert.deepEqual(creds.scopes, ["user:inference"])
+        },
+    })
+    assert.equal(recovered, "fresh-access")
 })

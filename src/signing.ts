@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto"
 import { resolveClaudeCodeVersion } from "./claude-version.ts"
+import { recoverRevokedAccessToken } from "./credentials.ts"
 
 const BILLING_SALT = "59cf53e54c78"
 const CCH_PLACEHOLDER = "cch=00000"
@@ -14,12 +15,16 @@ export const CC_ENTRYPOINT = "sdk-cli"
 
 /**
  * `cc_turn_origin` — must agree with the claimed entrypoint.
- * Live 2.1.278 `claude -p` / sdk-cli sends `sdk`; interactive TUI sends `human`.
+ * Live 2.1.284 `claude -p` / sdk-cli sends `sdk`; interactive TUI sends `human`.
  */
 export const CC_TURN_ORIGIN = "sdk"
 
-/** Pi main-thread traffic. Live 2.1.278 sdk-cli captures set this on every main request. */
+/** Pi main-thread traffic. Live 2.1.284 sdk-cli captures set this on every main request. */
 export const CC_REQUEST_CLASS = "main"
+
+/** First-turn values native 2.1.284 always appends on first-party sdk-cli. */
+export const CC_PROMPT_INDEX = 0
+export const CC_TURN_INDEX = 1
 
 // SDK/runtime identity Claude Code reports in X-Stainless-* headers. Verified
 // unchanged across 2.1.266/267/268/270/278 — unlike the release version, these do
@@ -50,12 +55,14 @@ export function supportsLongContextBeta(model: string | undefined): boolean {
     return typeof model === "string" && !CONTEXT_200K_MODEL.test(model)
 }
 
-// Claude Code's 2.1.278 first-party beta set shared by Fable 5.1, Opus 5 and
-// Sonnet 5 under `claude -p` / sdk-cli, in wire order, minus the model-gated
-// 1M beta. Live-captured 2026-09-19. Relative to 2.1.274: adds `advisor-tool`
-// and `thinking-binding-controls`. `thinking-display-updates` is NOT in the
-// common sdk-cli set (display is `omitted`/`summarized`); it is added only when
-// the body asks for `thinking.display: "updates"`.
+// Claude Code's 2.1.284 first-party beta set shared by Fable 5.1, Opus 5,
+// Opus 5.5, Sonnet 5 and Sonnet 5.5 under non-auto `claude -p` / sdk-cli, in
+// wire order, minus the model-gated 1M beta. Live-captured 2026-09-28.
+// `afk-mode` and `dangerous-tool-use` are auto-mode only (2.1.284 defaults
+// interactive *and* bare `-p` to auto; dontAsk/manual/acceptEdits omit them
+// and the `safeguards` body). `advisor-tool` is a feature gate and is no
+// longer on default sdk-cli. `thinking-display-updates` is NOT in the common
+// set; it is added only when the body asks for `thinking.display: "updates"`.
 //
 // This is merged into pi's computed beta list (see `mergeCapturedBetas`), never
 // asserted as a replacement. pi-ai treats a configured `anthropic-beta` header
@@ -71,11 +78,9 @@ export const CLAUDE_CODE_BETAS = [
     "context-management-2025-06-27",
     "prompt-caching-scope-2026-01-05",
     "mid-conversation-system-2026-04-07",
-    "advisor-tool-2026-03-01",
     "advanced-tool-use-2025-11-20",
     "effort-2025-11-24",
     "thinking-binding-controls-2026-08-01",
-    "afk-mode-2026-01-31",
     "extended-cache-ttl-2025-04-11",
     "cache-diagnosis-2026-04-07",
 ].join(",")
@@ -86,7 +91,9 @@ export const THINKING_DISPLAY_UPDATES = "updates"
 
 const MID_CONVERSATION_TOOL_CHANGE_MODEL =
     /^claude-(?:fable-5(?:-1)?|opus-(?:4-8|5))(?:-|$)/
-const FABLE_5_1_MODEL = /^claude-fable-5-1(?:-|$)/
+/** Live 2.1.284 sdk-cli: Fable 5.1, Opus 5.5, Sonnet 5.5. Opus 5 / Sonnet 5 do not send it. */
+const PER_TURN_CONTROL_MODEL =
+    /^claude-(?:fable-5-1|opus-5-5|sonnet-5-5)(?:-|$)/
 
 /**
  * The Claude Code release this request claims to be.
@@ -285,8 +292,14 @@ export function computeCchFromBody(body: Record<string, unknown>): string {
 }
 
 /**
- * Billing header in native 2.1.278 sdk-cli field order:
- * `cc_version; cc_entrypoint; cch; cc_prompt_id; cc_turn_origin`.
+ * Billing header in native 2.1.284 sdk-cli field order:
+ * `cc_version; cc_entrypoint; cch; cc_prompt_id; cc_turn_origin;
+ *  cc_prompt_index; cc_turn_index`.
+ *
+ * First-turn native values are `cc_prompt_index=0; cc_turn_index=1`.
+ * Later-turn counters are not tracked here (same class of omission as
+ * `cc_prev_req`): a stale index is worse than the first-turn pair, which
+ * native still accepts on every first-party request.
  */
 export function buildBillingHeaderValue(
     messages: Message[],
@@ -305,7 +318,9 @@ export function buildBillingHeaderValue(
         `cc_entrypoint=${entrypoint}; ` +
         `${CCH_PLACEHOLDER}; ` +
         `cc_prompt_id=${promptId};` +
-        `${origin}`
+        `${origin}` +
+        ` cc_prompt_index=${CC_PROMPT_INDEX};` +
+        ` cc_turn_index=${CC_TURN_INDEX};`
     )
 }
 
@@ -422,9 +437,12 @@ export function mergeCapturedBetas(
  * production would emit for the same model.
  *
  * Fallback betas (`server-side-fallback`, `fallback-credit`) are omitted: native
- * 2.1.278 sdk-cli main requests do not send them (they ride with a `fallbacks`
+ * 2.1.284 sdk-cli main requests do not send them (they ride with a `fallbacks`
  * body field on auxiliary traffic only). Advertising them without that field is
  * something native never does; Pi also strips `fallbacks` on OAuth.
+ * `afk-mode` and `dangerous-tool-use` are omitted for the same reason: 2.1.284
+ * sends them only from auto mode, coupled to a `safeguards` body Pi does not
+ * send. Default bare `claude -p` is now auto; non-auto `-p` matches this set.
  */
 export function capturedBetasFor(request: CapturedRequestShape): string[] {
     const betas = CLAUDE_CODE_BETAS.split(",")
@@ -434,7 +452,7 @@ export function capturedBetasFor(request: CapturedRequestShape): string[] {
         const afterSystem =
             betas.indexOf("mid-conversation-system-2026-04-07") + 1
         const systemBetas: string[] = []
-        if (FABLE_5_1_MODEL.test(model)) {
+        if (PER_TURN_CONTROL_MODEL.test(model)) {
             systemBetas.push("per-turn-control-2026-07-01")
         }
         if (MID_CONVERSATION_TOOL_CHANGE_MODEL.test(model)) {
@@ -485,11 +503,58 @@ export function applyClaudeCodeHeaderFidelity(
     headers.set("x-stainless-timeout", CC_STAINLESS_TIMEOUT)
     headers.set("x-stainless-runtime-version", CC_RUNTIME_VERSION)
     headers.set("x-claude-code-request-class", CC_REQUEST_CLASS)
+    // Claude Code's SDK client sets dangerouslyAllowBrowser, which emits this
+    // on every first-party request. It is not an experiment gate.
+    headers.set("anthropic-dangerous-direct-browser-access", "true")
     if (serializedBody === undefined) return
     const shape = shapeFromSerializedBody(serializedBody)
     if (supportsLongContextBeta(shape.model)) {
         insertBeta(headers, LONG_CONTEXT_BETA)
     }
+}
+
+const REVOKED_ACCESS_TOKEN = /OAuth access token has been revoked/i
+
+/**
+ * Live 2.1.284 sends `x-claude-code-prompt-id` equal to billing `cc_prompt_id`.
+ * Read it from the billing block only, so a user message that quotes the field
+ * cannot redirect the header.
+ */
+export function applyClaudeCodePromptId(
+    headers: Headers,
+    serializedBody: string | undefined,
+): void {
+    if (!serializedBody) return
+    try {
+        const parsed = JSON.parse(serializedBody) as {
+            system?: Array<{ text?: unknown }>
+        }
+        const text = parsed.system?.[0]?.text
+        if (typeof text !== "string") return
+        if (!text.startsWith("x-anthropic-billing-header:")) return
+        const promptId = /cc_prompt_id=([0-9a-f-]{36})/i.exec(text)?.[1]
+        if (promptId) headers.set("x-claude-code-prompt-id", promptId)
+    } catch {
+        // Non-JSON bodies are not Claude Code message requests.
+    }
+}
+
+/**
+ * One replay after a revoked-token 401. `recover` must re-read storage before
+ * refreshing: a concurrent Claude Code refresh already rotated the token, and
+ * refreshing again would consume the new refresh token.
+ */
+export async function retryIfOAuthRevoked(
+    response: Response,
+    replay: (accessToken: string) => Promise<Response>,
+    recover: () => string | null | Promise<string | null>,
+): Promise<Response> {
+    if (response.status !== 401) return response
+    const body = await response.clone().text()
+    if (!REVOKED_ACCESS_TOKEN.test(body)) return response
+    const recovered = await recover()
+    if (!recovered) return response
+    return replay(recovered)
 }
 
 let fetchPatched = false
@@ -538,26 +603,39 @@ export function installClaudeCodeFetchPatch(): void {
                 ? {}
                 : shapeFromSerializedBody(serializedBody),
         )
+        applyClaudeCodePromptId(headers, serializedBody)
         // Re-assert the user-agent per request. The provider registration sets
         // it once at extension load, so a Claude Code update mid-session would
         // leave every later request claiming the old release while the billing
         // header (built per request) claimed the new one.
         headers.set("user-agent", buildUserAgent())
 
-        if (serializedBody !== undefined) {
-            const patched = patchClaudeCodeCch(serializedBody)
-            if (typeof init?.body === "string") {
-                return original(url, { ...init, headers, body: patched })
+        const body =
+            serializedBody === undefined
+                ? init?.body
+                : patchClaudeCodeCch(serializedBody)
+        const method =
+            init?.method ??
+            (input instanceof Request ? input.method : undefined)
+        const signal =
+            init?.signal ??
+            (input instanceof Request ? input.signal : undefined)
+        const send = (accessToken?: string) => {
+            if (accessToken) {
+                headers.set("authorization", `Bearer ${accessToken}`)
             }
-            return original(
-                new Request(url, {
-                    method: (input as Request).method,
-                    headers,
-                    body: patched,
-                    signal: init?.signal ?? (input as Request).signal,
-                }),
-            )
+            return original(url, { ...init, method, headers, body, signal })
         }
-        return original(url, { ...init, headers })
+        const failedAccessToken = headers
+            .get("authorization")
+            ?.replace(/^Bearer\s+/i, "")
+        return retryIfOAuthRevoked(
+            await send(),
+            (accessToken) => send(accessToken),
+            () =>
+                failedAccessToken
+                    ? recoverRevokedAccessToken(failedAccessToken)
+                    : null,
+        )
     }
 }

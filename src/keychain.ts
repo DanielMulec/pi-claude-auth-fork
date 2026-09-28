@@ -9,6 +9,8 @@ export interface ClaudeCredentials {
     refreshToken: string
     expiresAt: number
     subscriptionType?: string
+    /** Space-delimited OAuth scopes, when the credential store recorded them. */
+    scopes?: string[]
 }
 
 export interface ClaudeAccount {
@@ -33,6 +35,7 @@ function parseCredentials(raw: string): ClaudeCredentials | null {
         refreshToken?: unknown
         expiresAt?: unknown
         subscriptionType?: unknown
+        scopes?: unknown
         mcpOAuth?: unknown
     }
 
@@ -63,6 +66,12 @@ function parseCredentials(raw: string): ClaudeCredentials | null {
         isMcpOnly: false,
     })
 
+    const scopes = Array.isArray(creds.scopes)
+        ? creds.scopes.filter(
+              (scope): scope is string => typeof scope === "string",
+          )
+        : undefined
+
     return {
         accessToken: creds.accessToken,
         refreshToken: creds.refreshToken,
@@ -71,6 +80,7 @@ function parseCredentials(raw: string): ClaudeCredentials | null {
             typeof creds.subscriptionType === "string"
                 ? creds.subscriptionType
                 : undefined,
+        scopes: scopes && scopes.length > 0 ? scopes : undefined,
     }
 }
 

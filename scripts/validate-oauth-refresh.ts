@@ -2,7 +2,7 @@
  * Validate that the direct OAuth token refresh works against the real endpoint.
  *
  * Reads your current Claude Code credentials, attempts a token refresh via
- * POST https://claude.ai/v1/oauth/token, and writes new tokens back to storage.
+ * POST https://platform.claude.com/v1/oauth/token, and writes new tokens back to storage.
  *
  * IMPORTANT: This rotates your refresh token. Write-back is enabled by default
  * to keep your stored credentials valid.
@@ -18,7 +18,10 @@
  *                     rotate)
  */
 
-import { OAUTH_CLIENT_ID, OAUTH_TOKEN_URL } from "../src/credentials.ts"
+import {
+    buildOAuthRefreshRequest,
+    OAUTH_CLIENT_ID,
+} from "../src/credentials.ts"
 import { readAllClaudeAccounts, writeBackCredentials } from "../src/keychain.ts"
 
 const args = new Set(process.argv.slice(2))
@@ -80,15 +83,16 @@ async function main() {
     console.log(`\n   Using: ${account.label} (${account.source})`)
 
     const refreshToken = account.credentials.refreshToken
-    const body = new URLSearchParams({
-        grant_type: "refresh_token",
-        client_id: OAUTH_CLIENT_ID,
-        refresh_token: refreshToken,
-    })
+    const request = buildOAuthRefreshRequest(
+        refreshToken,
+        account.credentials.scopes,
+    )
 
     console.log("\n2. OAuth refresh request:")
-    console.log(`   POST ${OAUTH_TOKEN_URL}`)
+    console.log(`   POST ${request.url}`)
+    console.log(`   content-type:  ${request.headers["Content-Type"]}`)
     console.log(`   client_id:     ${OAUTH_CLIENT_ID}`)
+    console.log(`   scope:         ${request.body.scope}`)
     console.log(`   refresh_token: ${redact(refreshToken)}`)
 
     if (dryRun) {
@@ -101,10 +105,10 @@ async function main() {
 
     let response: Response
     try {
-        response = await fetch(OAUTH_TOKEN_URL, {
+        response = await fetch(request.url, {
             method: "POST",
-            headers: { "Content-Type": "application/x-www-form-urlencoded" },
-            body: body.toString(),
+            headers: request.headers,
+            body: JSON.stringify(request.body),
         })
     } catch (err) {
         console.error("   FAIL: Network error:", (err as Error).message)
