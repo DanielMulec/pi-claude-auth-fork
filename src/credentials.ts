@@ -1,9 +1,12 @@
 import { execFileSync, execSync } from "node:child_process"
 import {
-    chmodSync,
     existsSync,
     mkdirSync,
     readFileSync,
+    renameSync,
+    rmdirSync,
+    rmSync,
+    statSync,
     writeFileSync,
 } from "node:fs"
 import { tmpdir } from "node:os"
@@ -88,45 +91,129 @@ export function saveAccountSource(source: string): void {
     }
 }
 
-function syncToPath(authPath: string, creds: ClaudeCredentials): void {
-    let auth: Record<string, unknown> = {}
-    if (existsSync(authPath)) {
-        const raw = readFileSync(authPath, "utf-8").trim()
-        if (raw) {
-            try {
-                auth = JSON.parse(raw)
-            } catch {
-                // Malformed file, start fresh
+// auth.json is shared by every running pi process and by pi's own
+// AuthStorage. Pi serializes access with proper-lockfile: a `<file>.lock`
+// directory, treated as stale once its mtime is older than the holder's
+// `stale` window (10s sync, 30s async; live holders refresh the mtime).
+// We take the same lock so our read-modify-write never interleaves with pi's
+// truncate-then-write, and so pi never reads our file half-written.
+const AUTH_LOCK_STALE_MS = 30_000
+const AUTH_LOCK_WAIT_MS = 500
+const AUTH_LOCK_RETRY_MS = 5
+
+function sleepSync(ms: number): void {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+}
+
+/** Acquire pi's auth.json lock; returns a release function or null on timeout. */
+function acquireAuthLock(authPath: string): (() => void) | null {
+    const lockPath = `${authPath}.lock`
+    const deadline = Date.now() + AUTH_LOCK_WAIT_MS
+    while (true) {
+        try {
+            mkdirSync(lockPath)
+            return () => {
+                try {
+                    rmdirSync(lockPath)
+                } catch {
+                    // Already removed (e.g. judged stale by another process).
+                }
             }
+        } catch (err) {
+            if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err
         }
+        try {
+            if (Date.now() - statSync(lockPath).mtimeMs > AUTH_LOCK_STALE_MS) {
+                rmdirSync(lockPath)
+                continue
+            }
+        } catch {
+            // Lock vanished between mkdir and stat: retry immediately.
+            continue
+        }
+        if (Date.now() >= deadline) return null
+        sleepSync(AUTH_LOCK_RETRY_MS)
     }
-    // pi persists OAuth credentials as `{ type: "oauth", access, refresh,
-    // expires }` keyed by provider id. Seeding the `anthropic` entry lets pi
-    // use the Claude Code credentials with no separate /login.
-    auth.anthropic = {
-        type: "oauth",
-        access: creds.accessToken,
-        refresh: creds.refreshToken,
-        expires: creds.expiresAt,
-    }
+}
+
+type SyncOutcome = "written" | "unchanged" | "locked" | "unreadable"
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+    return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function syncToPath(authPath: string, creds: ClaudeCredentials): SyncOutcome {
     const dir = dirname(authPath)
     if (!existsSync(dir)) {
         mkdirSync(dir, { recursive: true, mode: 0o700 })
     }
-    writeFileSync(authPath, JSON.stringify(auth, null, 2), {
-        encoding: "utf-8",
-        mode: 0o600,
-    })
-    if (process.platform !== "win32") {
-        chmodSync(authPath, 0o600)
+    const release = acquireAuthLock(authPath)
+    if (!release) return "locked"
+    try {
+        let auth: Record<string, unknown> = {}
+        if (existsSync(authPath)) {
+            // Never "start fresh" over an existing file: an empty or
+            // unparsable auth.json means another writer is mid-write or the
+            // file is damaged, and rewriting it would drop every other
+            // provider's credentials. Skip; the next sync retries.
+            const raw = readFileSync(authPath, "utf-8").trim()
+            if (!raw) return "unreadable"
+            let parsed: unknown
+            try {
+                parsed = JSON.parse(raw)
+            } catch {
+                return "unreadable"
+            }
+            if (!isPlainObject(parsed)) return "unreadable"
+            auth = parsed
+        }
+        // pi persists OAuth credentials as `{ type: "oauth", access, refresh,
+        // expires }` keyed by provider id. Seeding the `anthropic` entry lets
+        // pi use the Claude Code credentials with no separate /login.
+        const entry = {
+            type: "oauth",
+            access: creds.accessToken,
+            refresh: creds.refreshToken,
+            expires: creds.expiresAt,
+        }
+        const current = auth.anthropic
+        if (
+            isPlainObject(current) &&
+            current.type === entry.type &&
+            current.access === entry.access &&
+            current.refresh === entry.refresh &&
+            current.expires === entry.expires
+        ) {
+            return "unchanged"
+        }
+        auth.anthropic = entry
+        // Write-then-rename so no reader ever sees a truncated file.
+        const tmpPath = `${authPath}.${process.pid}.${Date.now()}.tmp`
+        try {
+            writeFileSync(tmpPath, JSON.stringify(auth, null, 2), {
+                encoding: "utf-8",
+                mode: 0o600,
+            })
+            renameSync(tmpPath, authPath)
+        } catch (err) {
+            rmSync(tmpPath, { force: true })
+            throw err
+        }
+        return "written"
+    } finally {
+        release()
     }
 }
 
 export function syncAuthJson(creds: ClaudeCredentials): void {
     const authPath = getAuthJsonPath()
     try {
-        syncToPath(authPath, creds)
-        log("sync_auth_json", { path: authPath, success: true })
+        const outcome = syncToPath(authPath, creds)
+        log("sync_auth_json", {
+            path: authPath,
+            success: outcome === "written" || outcome === "unchanged",
+            outcome,
+        })
     } catch (err) {
         log("sync_auth_json", {
             path: authPath,

@@ -1,6 +1,6 @@
 # pi-claude-auth
 
-> **Fork status (v0.7.4):** maintained fork of upstream `pi-claude-auth@0.1.3` (last upstream release 2026-06-04).
+> **Fork status (v0.7.5):** maintained fork of upstream `pi-claude-auth@0.1.3` (last upstream release 2026-06-04).
 > Changes vs upstream:
 >
 > - **Claude Code version is read from the installation, not pinned** — the release number is resolved from `~/.local/share/claude/versions` on every request, so a Claude Code update needs no change here. `ANTHROPIC_CLI_VERSION` remains a manual override, and a constant covers machines with no Claude Code installed (announced on stderr when used)

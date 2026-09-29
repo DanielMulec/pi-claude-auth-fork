@@ -1,5 +1,14 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import {
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    rmSync,
+    statSync,
+    utimesSync,
+    writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, test } from "node:test"
@@ -108,6 +117,46 @@ test("syncAuthJson: preserves other providers in auth.json", () => {
     }
     assert.equal(parsed.anthropic.access, "a2")
     assert.deepEqual(parsed.openai, { type: "api_key", key: "sk-test" })
+})
+
+test("syncAuthJson: never rewrites an empty or unparsable auth.json", () => {
+    const authPath = join(dir, "auth.json")
+    for (const content of ["", "   \n", '{"deepseek": {"type": "api_k', "[]"]) {
+        writeFileSync(authPath, content, "utf-8")
+        syncAuthJson({ accessToken: "a", refreshToken: "r", expiresAt: 1 })
+        assert.equal(readFileSync(authPath, "utf-8"), content)
+    }
+})
+
+test("syncAuthJson: waits for pi's lock and skips while it is held", () => {
+    const authPath = join(dir, "auth.json")
+    const seeded = JSON.stringify({ xai: { type: "api_key", key: "k" } })
+    writeFileSync(authPath, seeded, "utf-8")
+    mkdirSync(`${authPath}.lock`)
+    syncAuthJson({ accessToken: "a", refreshToken: "r", expiresAt: 1 })
+    assert.equal(readFileSync(authPath, "utf-8"), seeded)
+    assert.ok(existsSync(`${authPath}.lock`), "must not steal a live lock")
+})
+
+test("syncAuthJson: breaks a stale lock", () => {
+    const authPath = join(dir, "auth.json")
+    writeFileSync(authPath, "{}", "utf-8")
+    mkdirSync(`${authPath}.lock`)
+    const old = new Date(Date.now() - 60_000)
+    utimesSync(`${authPath}.lock`, old, old)
+    syncAuthJson({ accessToken: "a", refreshToken: "r", expiresAt: 1 })
+    const parsed = JSON.parse(readFileSync(authPath, "utf-8"))
+    assert.equal(parsed.anthropic.access, "a")
+    assert.equal(existsSync(`${authPath}.lock`), false)
+})
+
+test("syncAuthJson: leaves auth.json untouched when anthropic is current", () => {
+    const authPath = join(dir, "auth.json")
+    syncAuthJson({ accessToken: "a", refreshToken: "r", expiresAt: 1 })
+    const before = statSync(authPath).ino
+    syncAuthJson({ accessToken: "a", refreshToken: "r", expiresAt: 1 })
+    assert.equal(statSync(authPath).ino, before)
+    assert.equal((statSync(authPath).mode & 0o777).toString(8), "600")
 })
 
 test("account source persistence round-trips", () => {

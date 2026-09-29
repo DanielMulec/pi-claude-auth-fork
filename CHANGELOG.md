@@ -1,5 +1,32 @@
 # Changelog
 
+# 0.7.5 (2026-09-29) — fork release
+
+### Fixed
+
+- **auth.json wipe under concurrent pi processes.** `syncAuthJson` did an
+  unlocked read-modify-write and "started fresh" on an empty or unparsable
+  file. When it read auth.json during pi's (or another process's)
+  truncate-then-write, it rewrote the file with only `anthropic`, dropping every
+  other provider's credentials. Seen 2026-09-11 and 2026-09-29, both right after
+  parallel subagent launches. Now:
+  - takes pi's own `auth.json.lock` (proper-lockfile-compatible mkdir lock,
+    30s stale window, 500ms wait, skip on contention);
+  - never writes when an existing auth.json is empty, unparsable, or not an
+    object;
+  - writes via temp file + rename, so readers never see a partial file;
+  - skips the write when the `anthropic` entry is already current, so the
+    5-minute sync timer is normally a no-op.
+- `oauth.refreshToken` no longer calls `syncAuthJson`: pi invokes it while
+  holding the auth.json lock and persists the returned credentials itself.
+
+### Verified
+
+- New multi-process test (`src/auth-json-concurrency.test.ts`): 6 sync workers
+  plus 2 pi-style writers using pi's real proper-lockfile; fails on 0.7.4,
+  passes on 0.7.5. Unit tests cover empty/corrupt files, held and stale locks,
+  and no-op syncs.
+
 # 0.7.4 (2026-09-28) — fork release
 
 ### Changed
