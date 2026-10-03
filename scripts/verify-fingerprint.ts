@@ -24,6 +24,9 @@ import { join } from "node:path"
 import {
     buildUserAgent,
     capturedBetasFor,
+    CC_RUNTIME_VERSION,
+    CC_SDK_PACKAGE_VERSION,
+    CC_STAINLESS_TIMEOUT,
     computeCchFromBody,
     computeVersionSuffix,
     extractFirstUserMessageText,
@@ -182,12 +185,20 @@ for (const path of collect(targets)) {
             `  user-agent: ${headers.get("user-agent")} | this fork sends: ${buildUserAgent()}`,
         )
     }
+    const steelPkg = headers.get("x-stainless-package-version")
+    const steelRuntime = headers.get("x-stainless-runtime-version")
+    const steelTimeout = headers.get("x-stainless-timeout")
+    const steelOk =
+        (steelPkg === null || steelPkg === CC_SDK_PACKAGE_VERSION) &&
+        (steelRuntime === null || steelRuntime === CC_RUNTIME_VERSION) &&
+        (steelTimeout === null || steelTimeout === CC_STAINLESS_TIMEOUT)
+    if (headers.has("x-stainless-package-version") && !steelOk) failures++
     console.log(
         `  request-class=${headers.get("x-claude-code-request-class") ?? "-"} ` +
             `atis=${headers.has("x-cc-atis") ? "present" : "-"} ` +
-            `stainless=${headers.get("x-stainless-package-version") ?? "-"}/` +
-            `${headers.get("x-stainless-runtime-version") ?? "-"}/` +
-            `${headers.get("x-stainless-timeout") ?? "-"}`,
+            `stainless=${steelPkg ?? "-"}/${steelRuntime ?? "-"}/${steelTimeout ?? "-"} ` +
+            `fork=${CC_SDK_PACKAGE_VERSION}/${CC_RUNTIME_VERSION}/${CC_STAINLESS_TIMEOUT} ` +
+            (steelOk ? "OK" : "MISMATCH"),
     )
     console.log(`  identity[1]=${JSON.stringify(texts[1]?.slice(0, 70) ?? "")}`)
 

@@ -1,5 +1,84 @@
 # Changelog
 
+# 0.7.7 (2026-10-03) — fork release
+
+### Changed
+
+- **Verified Claude Code 2.1.288 `sdk-cli` fingerprint** while keeping the coherent
+  Agent SDK persona. Installed-version discovery stays primary; `FALLBACK_CC_VERSION`
+  is `2.1.288`.
+- **Stainless package version** is `0.128.0` (was `0.127.0`). Runtime `v26.3.0` and
+  timeout `600` did not move. Bun's embedded user-agent is still
+  `bun/1.4.3 … node/v26.3.0`.
+- Beta set, billing-header field order, `cch` seed/hash view, version-suffix
+  algorithm, OAuth token URL, client id, refresh JSON body, and the revoked-token
+  401 body are unchanged from 2.1.287.
+- Sonnet 5.5's catalog gained `per_turn_timing`. Native sends `timing-2026-09-09`
+  only when `CLAUDE_CODE_PER_TURN_TIMING` is set, so this fork still does not
+  advertise it.
+- Still omit `advisor-tool`, `inline-tools`, `afk-mode`, `dangerous-tool-use`,
+  `anthropic-dispatch-id`, and `x-cc-atis`. The first two are the same remote gates
+  as 2.1.287 (`tengu_sage_compass2`, `tengu_brisk_meadow`). Dispatch id `v2d` is
+  `tengu_dreamy_frost`. ATIS was present on some live captures and absent on others.
+
+### Verified
+
+- Binary `2.1.288` (build 2026-10-02T16:42:03Z, git `17fe1eb736e5b1433d6ca86a1db334cec8520450`)
+  against `2.1.287` (build 2026-10-01T16:02:06Z, git `3c446a1b98aceb99a6cdee0f84a8bea42f4a8937`).
+  Billing-header builder, salt `59cf53e54c78`, suffix samples `[4, 7, 20]`, identity
+  strings, and the beta registry are the same. No beta date string was added or removed.
+- Native `claude -p` 2.1.288 loopback captures (`--permission-mode dontAsk`; Sonnet 5,
+  Opus 5, Opus 5.5, Fable 5.1, Sonnet 5.5) plus one auto-mode Sonnet 5 control:
+  version suffix `733` for `Reply with exactly: OK`; cch values `c7bf5` / `e963f` /
+  `eea56` / `5974f` / `11d1b` (auto control `65ac6`). They recompute exactly under
+  the unchanged seed.
+- A second dontAsk pass with `CLAUDE_CODE_DISABLE_ADVISOR_TOOL=1` dropped
+  `advisor-tool` and the advisor tool. `inline-tools` remained only on models with
+  `mid_conv_tool_change`, matching the unchanged `tengu_brisk_meadow` gate.
+- Pi 1.0.0 through this extension: loopback captures on all five models recompute
+  `cch`, carry Stainless `0.128.0`, and keep pi's own betas
+  (`mid-conversation-output-config`, `thinking-binding-controls`). Live Pi turns
+  with extra usage **disabled** returned `OK` on all five models, and a bash
+  tool round-trip passed on Sonnet 5.5, Opus 5, and Fable 5.1. Plan windows were
+  charged; no third-party 400s.
+- Official 2.1.288 changelog has no billing-header, `cch`, beta-set, or OAuth entry.
+  It adds `CLAUDE_CODE_DISABLE_STRUCTURED_OUTPUTS` and limits background-command
+  timeouts to unattended sessions (`-p`, Agent SDK, CI, cloud). Neither changes
+  this fork's request shape.
+
+# 0.7.6 (2026-10-02) — fork release
+
+### Changed
+
+- **Verified Claude Code 2.1.287 `sdk-cli` fingerprint** while keeping the coherent
+  Agent SDK persona. Installed-version discovery stays primary; `FALLBACK_CC_VERSION`
+  is `2.1.287`.
+- **Stainless package version** is `0.127.0` (was `0.112.1`). It moved in 2.1.285
+  and is unchanged through 2.1.287. Runtime `v26.3.0` and timeout `600` did not move.
+- **Sonnet 5.5** now gets `mid-conversation-tool-changes-2026-07-01` as well as
+  `per-turn-control`, matching Fable 5.1 / Opus 5.5. The 2.1.287 model catalog adds
+  `mid_conv_tool_change`; 2.1.284–2.1.286 did not. Sonnet 5 still has neither extra.
+- Still omit `afk-mode` and `dangerous-tool-use`: 2.1.287 sends them only from auto
+  mode, with the `safeguards` body. Non-auto `-p` and Pi do not.
+
+### Verified
+
+- Native `claude -p` 2.1.287 loopback captures (`--permission-mode dontAsk`; Sonnet 5,
+  Opus 5, Opus 5.5, Fable 5.1, Sonnet 5.5): version suffix `5a4` for
+  `Reply with exactly: OK`; cch values `f5763` / `cbaaf` / `68b04` / `26e89` /
+  `92a06` recompute exactly under the unchanged seed.
+- Billing-header field order, `cch` hash view, Agent SDK identity, `?beta=true`,
+  `x-claude-code-request-class`, and `x-claude-code-prompt-id` are unchanged.
+  OAuth refresh is still JSON `POST https://platform.claude.com/v1/oauth/token`
+  with client id `9d1c250a-e61b-44d9-88ed-5944d1962f5e`. The 401 body is still
+  `OAuth access token has been revoked` (the new "OAuth token revoked" string is
+  Claude Code's display copy, not the API body).
+- Binary-only betas not on these captures, so not advertised: `cache-keepalive-2026-09-03`,
+  `timing-2026-09-09`, `inline-tools-2026-09-15`. `user-profiles-2026-08-18` is a
+  `/v1/user_profiles` beta, not a messages beta.
+- Official 2.1.285–2.1.287 changelog has no billing-header, `cch`, or beta-set entry.
+  The Stainless bump and the Sonnet 5.5 capability are capture findings, not changelog items.
+
 # 0.7.5 (2026-09-29) — fork release
 
 ### Fixed

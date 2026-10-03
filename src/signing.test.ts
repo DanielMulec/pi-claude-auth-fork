@@ -8,7 +8,9 @@ import {
     capturedBetasFor,
     CLAUDE_CODE_BETAS,
     CC_REQUEST_CLASS,
+    CC_RUNTIME_VERSION,
     CC_SDK_PACKAGE_VERSION,
+    CC_STAINLESS_TIMEOUT,
     CC_TURN_ORIGIN,
     computeCchFromBody,
     computeVersionSuffix,
@@ -127,6 +129,29 @@ test("computeVersionSuffix: live 2.1.284 sdk-cli capture", () => {
         computeVersionSuffix("Reply with exactly: OK", "2.1.284"),
         "f4f",
     )
+})
+
+test("computeVersionSuffix: live 2.1.287 sdk-cli capture", () => {
+    // Native claude -p 2.1.287, prompt "Reply with exactly: OK", all five models.
+    assert.equal(
+        computeVersionSuffix("Reply with exactly: OK", "2.1.287"),
+        "5a4",
+    )
+})
+
+test("computeVersionSuffix: live 2.1.288 sdk-cli capture", () => {
+    // Native claude -p 2.1.288, prompt "Reply with exactly: OK", all five models
+    // plus the auto-mode control.
+    assert.equal(
+        computeVersionSuffix("Reply with exactly: OK", "2.1.288"),
+        "733",
+    )
+})
+
+test("stainless identity: live 2.1.288 sdk-cli", () => {
+    assert.equal(CC_SDK_PACKAGE_VERSION, "0.128.0")
+    assert.equal(CC_RUNTIME_VERSION, "v26.3.0")
+    assert.equal(CC_STAINLESS_TIMEOUT, "600")
 })
 
 test("xxHash64: standard vectors", () => {
@@ -417,17 +442,43 @@ test("capturedBetasFor: 2.1.284 Opus 5.5 matches Fable per-turn gate", () => {
     ])
 })
 
-test("capturedBetasFor: 2.1.284 Sonnet 5.5 gets per-turn, not tool-changes", () => {
+test("capturedBetasFor: 2.1.287 Sonnet 5.5 gets per-turn and tool-changes", () => {
+    // Live dontAsk claude -p 2.1.287. 2.1.284 sent per-turn only; the 2.1.287
+    // catalog adds mid_conv_tool_change. Sonnet 5 still has neither extra.
     const betas = capturedBetasFor({
         model: "claude-sonnet-5-5",
         thinkingDisplay: "omitted",
     })
     const system = betas.indexOf("mid-conversation-system-2026-04-07")
-    assert.deepEqual(betas.slice(system, system + 2), [
+    assert.deepEqual(betas.slice(system, system + 3), [
         "mid-conversation-system-2026-04-07",
         "per-turn-control-2026-07-01",
+        "mid-conversation-tool-changes-2026-07-01",
     ])
-    assert.ok(!betas.includes("mid-conversation-tool-changes-2026-07-01"))
+    assert.ok(
+        !capturedBetasFor({ model: "claude-sonnet-5" }).includes(
+            "mid-conversation-tool-changes-2026-07-01",
+        ),
+    )
+})
+
+test("capturedBetasFor: 2.1.288 does not advertise remote or env gates", () => {
+    // Live dontAsk claude -p 2.1.288 with advisor disabled. inline-tools stayed
+    // on mid-conversation-tool-change models only because tengu_brisk_meadow was
+    // on; timing stayed off. Neither is a version default.
+    const betas = capturedBetasFor({
+        model: "claude-sonnet-5-5",
+        thinkingDisplay: "omitted",
+    })
+    for (const beta of [
+        "inline-tools-2026-09-15",
+        "timing-2026-09-09",
+        "advisor-tool-2026-03-01",
+        "afk-mode-2026-01-31",
+        "dangerous-tool-use-2026-09-03",
+    ]) {
+        assert.ok(!betas.includes(beta), beta)
+    }
 })
 
 test("mergeCapturedBetas: 2.1.278 Fable 5.1 model betas", () => {

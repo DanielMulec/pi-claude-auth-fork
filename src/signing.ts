@@ -15,22 +15,22 @@ export const CC_ENTRYPOINT = "sdk-cli"
 
 /**
  * `cc_turn_origin` — must agree with the claimed entrypoint.
- * Live 2.1.284 `claude -p` / sdk-cli sends `sdk`; interactive TUI sends `human`.
+ * Live 2.1.288 `claude -p` / sdk-cli sends `sdk`; interactive TUI sends `human`.
  */
 export const CC_TURN_ORIGIN = "sdk"
 
-/** Pi main-thread traffic. Live 2.1.284 sdk-cli captures set this on every main request. */
+/** Pi main-thread traffic. Live 2.1.288 sdk-cli captures set this on every main request. */
 export const CC_REQUEST_CLASS = "main"
 
-/** First-turn values native 2.1.284 always appends on first-party sdk-cli. */
+/** First-turn values native 2.1.288 always appends on first-party sdk-cli. */
 export const CC_PROMPT_INDEX = 0
 export const CC_TURN_INDEX = 1
 
-// SDK/runtime identity Claude Code reports in X-Stainless-* headers. Verified
-// unchanged across 2.1.266/267/268/270/278 — unlike the release version, these do
-// not move every release and nothing server-side enforces them. pi's own
-// @anthropic-ai/sdk is newer (0.123.x), which is itself a fingerprint.
-export const CC_SDK_PACKAGE_VERSION = "0.112.1"
+// SDK/runtime identity Claude Code reports in X-Stainless-* headers. The package
+// version moved 0.112.1 → 0.127.0 in 2.1.285 and 0.127.0 → 0.128.0 in 2.1.288.
+// Runtime and timeout are unchanged since 2.1.266. These do not move every
+// release. pi's own SDK version is a different fingerprint, so this override stays.
+export const CC_SDK_PACKAGE_VERSION = "0.128.0"
 export const CC_RUNTIME_VERSION = "v26.3.0"
 export const CC_STAINLESS_TIMEOUT = "600"
 export const AGENT_SDK_IDENTITY =
@@ -55,9 +55,10 @@ export function supportsLongContextBeta(model: string | undefined): boolean {
     return typeof model === "string" && !CONTEXT_200K_MODEL.test(model)
 }
 
-// Claude Code's 2.1.284 first-party beta set shared by Fable 5.1, Opus 5,
+// Claude Code's 2.1.288 first-party beta set shared by Fable 5.1, Opus 5,
 // Opus 5.5, Sonnet 5 and Sonnet 5.5 under non-auto `claude -p` / sdk-cli, in
-// wire order, minus the model-gated 1M beta. Live-captured 2026-09-28.
+// wire order, minus the model-gated 1M beta. Re-captured 2026-10-03; the common
+// list is unchanged from 2.1.284.
 // `afk-mode` and `dangerous-tool-use` are auto-mode only (2.1.284 defaults
 // interactive *and* bare `-p` to auto; dontAsk/manual/acceptEdits omit them
 // and the `safeguards` body). `advisor-tool` is a feature gate and is no
@@ -89,9 +90,14 @@ export const CLAUDE_CODE_BETAS = [
 const DISPLAY_UPDATES_BETA = "thinking-display-updates-2026-08-18"
 export const THINKING_DISPLAY_UPDATES = "updates"
 
+// 2.1.287 catalog adds mid_conv_tool_change to Sonnet 5.5. Sonnet 5 still
+// does not have it. 2.1.288 adds per_turn_timing to Sonnet 5.5's catalog, but
+// native sends `timing-2026-09-09` only when CLAUDE_CODE_PER_TURN_TIMING is
+// set — dontAsk captures do not include it, so it stays off this list.
+// Live dontAsk sdk-cli captures match this gate.
 const MID_CONVERSATION_TOOL_CHANGE_MODEL =
-    /^claude-(?:fable-5(?:-1)?|opus-(?:4-8|5))(?:-|$)/
-/** Live 2.1.284 sdk-cli: Fable 5.1, Opus 5.5, Sonnet 5.5. Opus 5 / Sonnet 5 do not send it. */
+    /^claude-(?:fable-5(?:-1)?|opus-(?:4-8|5)|sonnet-5-5)(?:-|$)/
+/** Live 2.1.288 sdk-cli: Fable 5.1, Opus 5.5, Sonnet 5.5. Opus 5 / Sonnet 5 do not send it. */
 const PER_TURN_CONTROL_MODEL =
     /^claude-(?:fable-5-1|opus-5-5|sonnet-5-5)(?:-|$)/
 
@@ -292,7 +298,7 @@ export function computeCchFromBody(body: Record<string, unknown>): string {
 }
 
 /**
- * Billing header in native 2.1.284 sdk-cli field order:
+ * Billing header in native sdk-cli field order (unchanged through 2.1.288):
  * `cc_version; cc_entrypoint; cch; cc_prompt_id; cc_turn_origin;
  *  cc_prompt_index; cc_turn_index`.
  *
@@ -437,12 +443,15 @@ export function mergeCapturedBetas(
  * production would emit for the same model.
  *
  * Fallback betas (`server-side-fallback`, `fallback-credit`) are omitted: native
- * 2.1.284 sdk-cli main requests do not send them (they ride with a `fallbacks`
+ * 2.1.288 sdk-cli main requests do not send them (they ride with a `fallbacks`
  * body field on auxiliary traffic only). Advertising them without that field is
  * something native never does; Pi also strips `fallbacks` on OAuth.
- * `afk-mode` and `dangerous-tool-use` are omitted for the same reason: 2.1.284
+ * `afk-mode` and `dangerous-tool-use` are omitted for the same reason: 2.1.288
  * sends them only from auto mode, coupled to a `safeguards` body Pi does not
  * send. Default bare `claude -p` is now auto; non-auto `-p` matches this set.
+ * `inline-tools` and `advisor-tool` stay omitted: same remote gates as 2.1.287
+ * (`tengu_brisk_meadow`, `tengu_sage_compass2`), not a version default. This
+ * account had both on; disabling advisor removed only `advisor-tool`.
  */
 export function capturedBetasFor(request: CapturedRequestShape): string[] {
     const betas = CLAUDE_CODE_BETAS.split(",")
@@ -516,7 +525,7 @@ export function applyClaudeCodeHeaderFidelity(
 const REVOKED_ACCESS_TOKEN = /OAuth access token has been revoked/i
 
 /**
- * Live 2.1.284 sends `x-claude-code-prompt-id` equal to billing `cc_prompt_id`.
+ * Live 2.1.288 sends `x-claude-code-prompt-id` equal to billing `cc_prompt_id`.
  * Read it from the billing block only, so a user message that quotes the field
  * cannot redirect the header.
  */

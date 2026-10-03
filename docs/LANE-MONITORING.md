@@ -34,6 +34,32 @@ OAuth shape.
 four probes (sonnet-5 and opus-5, pi shape and Claude Code shape), all HTTP 200,
 overage utilization `0.0`, 5h/7d at 1%.
 
+**Fingerprint re-checked 2026-10-03 against Claude Code 2.1.288** (binary
+diff plus loopback `claude -p`; not a plan-vs-extra-usage oracle). Sonnet 5,
+Opus 5, Opus 5.5, Fable 5.1, and Sonnet 5.5, plus one auto-mode Sonnet 5
+control. `cch` seed/hash view and the version-suffix algorithm are unchanged
+(`733` for `Reply with exactly: OK`). Billing-header fields, OAuth token URL,
+client id, and JSON refresh body are unchanged. Stainless package version is
+now `0.128.0` (runtime `v26.3.0` and timeout `600` did not). Sonnet 5.5's
+catalog gained `per_turn_timing`, but default sdk-cli does not send
+`timing-2026-09-09`. `inline-tools` and `advisor-tool` remain remote gates;
+`anthropic-dispatch-id: v2d` is `tengu_dreamy_frost`, not a version constant.
+`x-cc-atis` was still missing on some captures. This fork still omits those.
+Real Pi 1.0.0 turns on all five models, with extra usage disabled, returned
+HTTP 200 and billed to the plan (including a tool-result turn).
+
+**Fingerprint re-checked 2026-10-02 against Claude Code 2.1.287** (loopback
+`claude -p` only; not a plan-vs-extra-usage oracle). Sonnet 5, Opus 5, Opus 5.5,
+Fable 5.1, and Sonnet 5.5, plus one auto-mode Sonnet 5 control. `cch` seed/hash
+view and the version-suffix algorithm are unchanged (`5a4` for
+`Reply with exactly: OK`). Billing-header fields, OAuth token URL, and client id
+are unchanged. Stainless package version is now `0.127.0` (moved in 2.1.285;
+runtime `v26.3.0` and timeout `600` did not). Sonnet 5.5 now sends
+`mid-conversation-tool-changes` with `per-turn-control`. Auto mode still adds
+`afk-mode`, `dangerous-tool-use`, and `safeguards`; non-auto `-p` and this fork
+omit those. Registry betas `cache-keepalive`, `timing`, and `inline-tools` are
+not on default sdk-cli main traffic.
+
 **Fingerprint re-checked 2026-09-28 against Claude Code 2.1.284** (loopback
 `claude -p` only; not a plan-vs-extra-usage oracle). Sonnet 5, Opus 5, Opus 5.5,
 Fable 5.1, and Sonnet 5.5. `cch` seed/hash view and the version-suffix algorithm
