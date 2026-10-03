@@ -7,6 +7,8 @@
 - **Verified Claude Code 2.1.288 `sdk-cli` fingerprint** while keeping the coherent
   Agent SDK persona. Installed-version discovery stays primary; `FALLBACK_CC_VERSION`
   is `2.1.288`.
+- **Dev dependency on Pi is `^1.0.1`** (was `^0.83.0`), so types check against the
+  Pi that actually runs. The peer dependency stays `*`.
 - **Stainless package version** is `0.128.0` (was `0.127.0`). Runtime `v26.3.0` and
   timeout `600` did not move. Bun's embedded user-agent is still
   `bun/1.4.3 … node/v26.3.0`.
