@@ -298,7 +298,7 @@ export function computeCchFromBody(body: Record<string, unknown>): string {
 }
 
 /**
- * Billing header in native sdk-cli field order (unchanged through 2.1.288):
+ * Billing header in native sdk-cli field order (unchanged through 2.1.289):
  * `cc_version; cc_entrypoint; cch; cc_prompt_id; cc_turn_origin;
  *  cc_prompt_index; cc_turn_index`.
  *

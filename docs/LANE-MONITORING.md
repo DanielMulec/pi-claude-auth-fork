@@ -34,6 +34,16 @@ OAuth shape.
 four probes (sonnet-5 and opus-5, pi shape and Claude Code shape), all HTTP 200,
 overage utilization `0.0`, 5h/7d at 1%.
 
+**Fingerprint re-checked 2026-10-04 against Claude Code 2.1.289** (binary
+diff plus loopback `claude -p` for the five current models; not a plan-vs-extra-usage
+oracle). Nothing in the fingerprint moved: `cch` seed/hash view recompute exactly,
+version suffix is `fbd` for `Reply with exactly: OK`, beta set, headers, body keys,
+Stainless `0.128.0`, and OAuth constants are unchanged from 2.1.288. Pi 1.0.2 (whose
+Anthropic provider equals 1.0.1's) sends `inline-tools-2026-09-15` itself on
+tool-change models; native does the same and live turns accept it. Real Pi 1.0.2
+turns on all five models, with extra usage disabled, returned HTTP 200 (including
+bash tool round-trips).
+
 **Fingerprint re-checked 2026-10-03 against Claude Code 2.1.288** (binary
 diff plus loopback `claude -p`; not a plan-vs-extra-usage oracle). Sonnet 5,
 Opus 5, Opus 5.5, Fable 5.1, and Sonnet 5.5, plus one auto-mode Sonnet 5

@@ -1,5 +1,44 @@
 # Changelog
 
+# 0.7.8 (2026-10-04) — fork release
+
+### Changed
+
+- **Verified Claude Code 2.1.289 `sdk-cli` fingerprint** and **Pi 1.0.2**. No
+  request-shaping change was needed. Installed-version discovery stays primary;
+  `FALLBACK_CC_VERSION` is `2.1.289`.
+- **Dev dependency on Pi is `^1.0.2`** (was `^1.0.1`).
+
+### Verified
+
+- Binary `2.1.289` (build 2026-10-03T19:21:39Z, git `736d26eef42d1e3017e07e6d5bd0970b8c3a068f`)
+  against `2.1.288` (build 2026-10-02T16:42:03Z). The beta-date registry, billing-header
+  builder, OAuth token URL, OAuth client id, and Stainless `0.128.0` strings are
+  identical. Native `claude -p` loopback captures of both versions (Sonnet 5, Opus 5.5)
+  have the same header names, same body keys, and same beta header; only
+  `user-agent` and per-request ids differ.
+- Native `claude -p` 2.1.289 loopback captures (`--permission-mode dontAsk`; Sonnet 5,
+  Opus 5, Opus 5.5, Fable 5.1, Sonnet 5.5): version suffix `fbd` for
+  `Reply with exactly: OK`; cch `c847a` / `69eca` / `9e86c` / `8e348` / `7a952`
+  recompute exactly under the unchanged seed. Observed extras are only the known
+  remote-gated `advisor-tool` and `inline-tools`.
+- Pi 1.0.2 through this extension: loopback captures on all five models recompute
+  `cch` and the suffix, carry Stainless `0.128.0` and `claude-cli/2.1.289`, and
+  contain every native beta. A Pi bash tool round-trip capture (Opus 5.5)
+  recomputes `cch` on both requests. Live Pi turns with extra usage **disabled**
+  returned `OK` on all five models, and a bash tool round-trip passed on all five;
+  no third-party 400s.
+- **Pi 1.0.1 → 1.0.2:** the bundled Anthropic provider is byte-identical apart from
+  chunk-hash import names; 1.0.2 only adds OpenAI-compatible
+  `samplingParamsByThinkingLevel`. The Pi 1.0.1 change that matters to this fork
+  (tools added or redefined mid-conversation are defined inline) makes Pi send
+  `inline-tools-2026-09-15` itself on models with native tool changes (not Sonnet 5).
+  The merge keeps Pi's betas, native sdk-cli sends the same beta on those models, and
+  live turns accept it, so nothing was changed.
+- Official 2.1.289 changelog has no billing-header, `cch`, beta-set, or OAuth-protocol
+  entry. It reverts the 2.1.288 `claude auth status` change that signed out VS Code
+  extension users; this fork reads the Keychain directly and never calls that command.
+
 # 0.7.7 (2026-10-03) — fork release
 
 ### Changed

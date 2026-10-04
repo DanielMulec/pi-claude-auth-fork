@@ -1,6 +1,6 @@
 # Canonical line
 
-Source of truth for this repo: **v0.7.7**, Claude Code **2.1.288** `sdk-cli` fingerprint (see `CHANGELOG.md`). Work from current `main` / `HEAD`.
+Source of truth for this repo: **v0.7.8**, Claude Code **2.1.289** `sdk-cli` fingerprint (see `CHANGELOG.md`). Work from current `main` / `HEAD`.
 
 - Move git refs (pull, fast-forward, merge, rebase, reset, push) only when the user asks.
 - Explore alternate history, extra refs, or paths outside this repo only when the user names a specific ref or path.
