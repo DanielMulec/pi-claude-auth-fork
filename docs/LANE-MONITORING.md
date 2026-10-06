@@ -34,6 +34,21 @@ OAuth shape.
 four probes (sonnet-5 and opus-5, pi shape and Claude Code shape), all HTTP 200,
 overage utilization `0.0`, 5h/7d at 1%.
 
+**Fingerprint and plan acceptance re-checked 2026-10-06 against Claude Code
+2.1.292 / Pi 1.0.4.** Native non-auto `claude -p` loopback captures on all five
+current models reproduce cch exactly, with suffix `d1c` for
+`Reply with exactly: OK`. Required betas, billing fields, identity, Stainless
+`0.128.0` / `v26.3.0` / `600`, and OAuth constants still match; no production
+shape change was needed. Fresh Pi processes loading this checkout pass plain
+replies and bash tool round-trips on all five models (15 live HTTP 200 requests,
+all final-wire fingerprints verified). Extra usage was disabled throughout;
+response headers allow plan windows and reject overage. Three paired replays
+of one real Pi Sonnet 5 body discriminate SDK-positive (200 / plan) from
+`cli`+Pi-negative (third-party 400). Spend stayed $0 and the usage breakdown
+100% Claude Code; rounded usage-endpoint totals did not change. Request ids and
+native cch values are recorded in [`CHANGELOG.md`](../CHANGELOG.md#079-2026-10-06--fork-release).
+This verifies main turns and tool continuations, not compaction/auxiliary paths.
+
 **Fingerprint re-checked 2026-10-04 against Claude Code 2.1.289** (binary
 diff plus loopback `claude -p` for the five current models; not a plan-vs-extra-usage
 oracle). Nothing in the fingerprint moved: `cch` seed/hash view recompute exactly,

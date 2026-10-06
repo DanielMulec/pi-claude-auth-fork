@@ -156,7 +156,15 @@ test("computeVersionSuffix: live 2.1.289 sdk-cli capture", () => {
     )
 })
 
-test("stainless identity: live 2.1.289 sdk-cli (unchanged from 2.1.288)", () => {
+test("computeVersionSuffix: live 2.1.292 sdk-cli capture", () => {
+    // Native claude -p 2.1.292, prompt "Reply with exactly: OK", all five models.
+    assert.equal(
+        computeVersionSuffix("Reply with exactly: OK", "2.1.292"),
+        "d1c",
+    )
+})
+
+test("stainless identity: live 2.1.292 sdk-cli (unchanged from 2.1.288)", () => {
     assert.equal(CC_SDK_PACKAGE_VERSION, "0.128.0")
     assert.equal(CC_RUNTIME_VERSION, "v26.3.0")
     assert.equal(CC_STAINLESS_TIMEOUT, "600")

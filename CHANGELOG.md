@@ -1,5 +1,55 @@
 # Changelog
 
+# 0.7.9 (2026-10-06) — fork release
+
+### Changed
+
+- **Verified Claude Code 2.1.292 `sdk-cli` fingerprint** and **Pi 1.0.4**. No
+  request-shaping change was needed. Installed-version discovery stays primary;
+  `FALLBACK_CC_VERSION` is `2.1.292`.
+- **Dev dependency on Pi is `^1.0.4`** (was `^1.0.2`), with the lockfile updated.
+- Added the native 2.1.292 version-suffix regression vector and refreshed the
+  canonical-line and billing verification records. Pi prompts, tools, identity,
+  OAuth refresh/recovery, and beta merging are unchanged.
+
+### Verified
+
+- Installed binary **2.1.292** (build `2026-10-06T05:25:12Z`, git
+  `37832d0b7cad7b40bac7c82dff58629313913edf`). Binary strings still contain
+  suffix salt `59cf53e54c78`, OAuth token URL
+  `https://platform.claude.com/v1/oauth/token`, client id
+  `9d1c250a-e61b-44d9-88ed-5944d1962f5e`, and Stainless `0.128.0`.
+- Native `claude -p --permission-mode dontAsk` loopback captures for **Sonnet 5,
+  Opus 5, Opus 5.5, Fable 5.1, Sonnet 5.5**: suffix **`d1c`** for
+  `Reply with exactly: OK`; native cch values `79396` / `e8890` / `61ab9` /
+  `746d2` / `8b826` recompute exactly under the unchanged seed/hash view.
+  Billing fields, Agent SDK identity, Stainless `0.128.0` / `v26.3.0` / `600`,
+  and required betas match the fork. Native extras remain the known remote-gated
+  `advisor-tool` and `inline-tools`; Pi supplies its own inline-tools beta where
+  needed. Opaque ATIS remains intermittent and is not copied.
+- **Pi 1.0.4, loading this checkout's `src/index.ts` in fresh processes:**
+  loopback captures on all five models pass fingerprint verification. Live
+  plain replies and bash tool round-trips pass on all five models (**15 HTTP 200
+  requests**); every final wire body recomputes cch and the version suffix.
+  Response headers report allowed plan windows and rejected/disabled overage.
+- **Discriminating real-Pi billing oracle, 3 paired replays:** a captured final
+  Sonnet 5 request returns **HTTP 200 / plan** on all three SDK-positive runs;
+  changing only the persona bundle to `cli` + Claude Code identity + `human`
+  turn origin (keeping Pi's system prompt and recomputing cch) returns the
+  exact **third-party HTTP 400** on all three negative runs. Positive request ids:
+  `req_011Cfmbwr4GHGh1iEMUSmQzg`, `req_011Cfmbx2v88p7GcWwhNgwaa`,
+  `req_011CfmbxFJ1Y33vSFnRe116z`. Negative request ids:
+  `req_011CfmbwxyFNoMGBDoCUbRUx`, `req_011CfmbxBfUWtQmAHW3zUimp`,
+  `req_011CfmbxN8n9xPeHq5mc7CAA`. The negative shape is test-only, never a
+  production setting.
+- Account usage before/after: **extra usage disabled**, spend **$0**, usage
+  breakdown **100% Claude Code**. Rounded usage-endpoint totals stayed 5h 2% /
+  7d 44%; no claim of an attributable usage delta from those rounded totals.
+- Official [2.1.290–2.1.292 changelog](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md):
+  gateway beta rejection recovery, macOS login/Keychain reporting, and SDK
+  lifecycle fixes, but no announced direct OAuth request-fingerprint change.
+  Native captures and real Pi acceptance, not release notes, are the gate.
+
 # 0.7.8 (2026-10-04) — fork release
 
 ### Changed
