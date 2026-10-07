@@ -1,9 +1,10 @@
-# Billing Monitoring — plan windows vs extra usage
+# Billing Monitoring — plan windows, extra usage, and Console credits
 
-This fork routes Anthropic requests with Claude Code's fingerprint so they bill
-against the Claude Pro/Max **plan windows** rather than per-token **extra usage
-(usage credits)**. Which entitlement pays is decided server-side by an
-undocumented classifier that has changed repeatedly (Apr 4, Apr 8, Jun 15 2026) — so the billing is verified **empirically**, not assumed.
+This fork uses Claude Code's fingerprint to seek Claude Pro/Max **plan-window**
+routing rather than per-token **extra usage (usage credits)**. Which entitlement
+pays is decided server-side by an undocumented classifier that has changed
+repeatedly (Apr 4, Apr 8, Jun 15 2026). Billing must be verified **empirically**,
+not assumed; the current measurement below is inconclusive.
 
 **Classifier / identity contingency** (dormant; production stays `sdk-cli`):
 [CLAUDE-OAUTH-CONTINGENCY.md](./CLAUDE-OAUTH-CONTINGENCY.md). Tiny `lane:check`
@@ -16,6 +17,41 @@ when diagnosing third-party routing.
 > credits**. The file name, the `lane:check` npm script and a few type names
 > keep the older "lane" wording; the script prints the messages you are reading
 > about.
+
+## Current measurement (2026-10-07)
+
+**v0.7.10 / Claude Code 2.1.293 / Pi 1.0.4:** native non-auto `claude -p`
+captures cover six models, including Haiku 5.5. The only new required beta
+mapping is Haiku 5.5's per-turn control and mid-conversation tool changes.
+Suffix `e51`, cch, OAuth constants, and Stainless identity verify. Fresh Pi
+processes loading this checkout pass plain replies and bash tool round-trips
+on the five existing catalog models (15 HTTP 200 requests; all final-wire
+fingerprints verified). Haiku 5.5 live Pi testing awaits the user's catalog
+refresh; no model registration/configuration was changed.
+
+**Billing remains inconclusive.** A real Sonnet 5.5/high subagent completed
+three model turns on a Max account. Usage snapshots at 19:39:35Z (before),
+19:41:29Z (after), and 19:47:20Z (delayed) all reported **5h 0% / 7d 44%**.
+OAuth extra usage was disabled, spend stayed **$0**, and the weekly breakdown
+remained 100% Claude Code. No attributable plan deduction was observed.
+Rounding or delayed accounting is possible, but not established. Pi's
+approximately $0.0955 calculated token cost is not a billed amount.
+
+Keep three ledgers distinct:
+
+1. Subscription **5h / 7d plan windows**.
+2. OAuth **extra usage / usage credits**, observed by `pnpm run usage`.
+3. **Console/API credits**, including the new monthly credits for Max/Team
+   linked to a Console organization. The OAuth usage endpoint does not prove
+   this balance; Console credit consumption was **not observed** in this run.
+
+The [monthly API credits policy](https://support.claude.com/en/articles/17154008-monthly-api-credits-for-max-and-team-plans)
+and [Agent SDK policy](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan)
+are policy evidence, not measurements of this fork's billing. Live response
+headers reported plan allowance and rejected/disabled overage, but that does
+not establish a deduction or exclude Console credits. The 2.1.292 paired
+oracle below is historical; **no 2.1.293 paired negative controls were run**.
+Production identity stays `sdk-cli` while accounting remains unresolved.
 
 ## Baseline (2026-09-10, re-verified 2026-09-17)
 
@@ -144,9 +180,11 @@ The script sends two tiny requests with the keychain OAuth token:
 ### What has actually been consumed
 
 The check above reports where a request was _routed_. What it cannot show is
-what the account has actually been charged — for that, Anthropic's own usage
-endpoint (the one Claude Code's `/usage` calls) is authoritative. It costs no
-tokens:
+what the account has actually been charged. Anthropic's own OAuth usage
+endpoint (the one Claude Code's `/usage` calls) reports plan windows and OAuth
+extra usage, but not a verified Console/API credit ledger. Unchanged rounded
+percentages do not establish a deduction or prove zero consumption. It costs
+no tokens:
 
 ```bash
 pnpm run usage            # plan windows + extra usage
@@ -157,13 +195,13 @@ and prints the unified rate-limit response headers.
 
 ## Reading the output
 
-| Signal                                                          | Meaning                                                   |
-| --------------------------------------------------------------- | --------------------------------------------------------- |
-| `overage-status: allowed` + `overage-utilization: 0.0`          | ✅ plan windows — nothing drawn from extra usage          |
-| `overage-utilization: > 0`                                      | ⚠️ **extra usage** — per-token billing active             |
-| `overage-status: blocked`                                       | ⛔ blocked from extra usage and not covered by the plan   |
-| `5h` / `7d` utilization rising                                  | ✅ plan windows being consumed (expected)                 |
-| HTTP 400 with "Third-party apps now draw from your extra usage" | ⛔ classifier flagged the request — billed to extra usage |
+| Signal                                                          | Meaning                                                            |
+| --------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `overage-status: allowed` + `overage-utilization: 0.0`          | Routing signal; no reported overage, not proof of plan deduction   |
+| `overage-utilization: > 0`                                      | ⚠️ Reported **extra usage** consumption; compare before/after      |
+| `overage-status: blocked` / `rejected`                          | Extra usage unavailable; does not alone identify the paying ledger |
+| `5h` / `7d` utilization rising                                  | Plan consumption evidence; attribute with an isolated workload     |
+| HTTP 400 with "Third-party apps now draw from your extra usage" | ⛔ Third-party routing rejection, not a successful billed request  |
 
 ## Fingerprint verification (2026-09-10)
 
@@ -320,10 +358,12 @@ version-specific test vector, and verification record advanced to 2.1.274.
   under the extension.
 - **After any Anthropic policy news** — watch support.claude.com 12429409 /
   15036540 and the code.claude.com changelog.
-- **Any time the billing question is live**, `pnpm run lane:check` is the ~5 s
-  answer for routing, and `pnpm run usage` reports what has actually been
-  consumed (plan windows and `extra_usage.used_credits`) without spending
-  tokens. Both call Anthropic with the keychain OAuth token.
+- **Any time the billing question is live**, use a real-Pi capture with paired
+  controls for routing. Tiny `pnpm run lane:check` requests can be false green.
+  `pnpm run usage` reports plan windows and `extra_usage.used_credits` without
+  spending tokens, but rounded values can hide a small delta. Measure the
+  Console/API credit ledger separately when relevant. Both scripts call
+  Anthropic with the keychain OAuth token.
 
 ## When billing moves to extra usage
 
@@ -350,8 +390,8 @@ version-specific test vector, and verification record advanced to 2.1.274.
   pass through the extension's `before_provider_request` hook, so they carry no
   billing header. They _do_ get the Claude Code user-agent, `X-Stainless-*`
   headers, and merged beta set because every OAuth request passes through the
-  fetch patch. Today they still bill to the plan; they would flip first if the
-  classifier tightened.
+  fetch patch. Historical tests showed plan routing; current accounting is
+  inconclusive, and these paths could be affected if the classifier tightened.
 - `claude-fable-5` is metered to usage credits **even in genuine Claude Code**
   — no flat-rate route exists; avoid it if flat-rate billing is the goal.
 - On Pro, Opus 1M context may require usage credits (Max gets it by default).

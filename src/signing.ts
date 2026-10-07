@@ -94,12 +94,13 @@ export const THINKING_DISPLAY_UPDATES = "updates"
 // does not have it. 2.1.288 adds per_turn_timing to Sonnet 5.5's catalog, but
 // native sends `timing-2026-09-09` only when CLAUDE_CODE_PER_TURN_TIMING is
 // set — dontAsk captures do not include it, so it stays off this list.
-// Live dontAsk sdk-cli captures match this gate.
+// 2.1.293 adds Haiku 5.5: native dontAsk sdk-cli sends both tool changes
+// and per-turn control. Older Haiku models keep their existing gates.
 const MID_CONVERSATION_TOOL_CHANGE_MODEL =
-    /^claude-(?:fable-5(?:-1)?|opus-(?:4-8|5)|sonnet-5-5)(?:-|$)/
-/** Live 2.1.288 sdk-cli: Fable 5.1, Opus 5.5, Sonnet 5.5. Opus 5 / Sonnet 5 do not send it. */
+    /^claude-(?:fable-5(?:-1)?|opus-(?:4-8|5)|sonnet-5-5|haiku-5-5)(?:-|$)/
+/** Live 2.1.293 sdk-cli: Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5. Not Opus 5 / Sonnet 5. */
 const PER_TURN_CONTROL_MODEL =
-    /^claude-(?:fable-5-1|opus-5-5|sonnet-5-5)(?:-|$)/
+    /^claude-(?:fable-5-1|opus-5-5|sonnet-5-5|haiku-5-5)(?:-|$)/
 
 /**
  * The Claude Code release this request claims to be.

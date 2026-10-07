@@ -164,7 +164,15 @@ test("computeVersionSuffix: live 2.1.292 sdk-cli capture", () => {
     )
 })
 
-test("stainless identity: live 2.1.292 sdk-cli (unchanged from 2.1.288)", () => {
+test("computeVersionSuffix: live 2.1.293 sdk-cli capture", () => {
+    // Native claude -p 2.1.293, including Haiku 5.5, same prompt on all six models.
+    assert.equal(
+        computeVersionSuffix("Reply with exactly: OK", "2.1.293"),
+        "e51",
+    )
+})
+
+test("stainless identity: live 2.1.293 sdk-cli (unchanged from 2.1.288)", () => {
     assert.equal(CC_SDK_PACKAGE_VERSION, "0.128.0")
     assert.equal(CC_RUNTIME_VERSION, "v26.3.0")
     assert.equal(CC_STAINLESS_TIMEOUT, "600")
@@ -476,6 +484,50 @@ test("capturedBetasFor: 2.1.287 Sonnet 5.5 gets per-turn and tool-changes", () =
             "mid-conversation-tool-changes-2026-07-01",
         ),
     )
+})
+
+test("capturedBetasFor: 2.1.293 Haiku 5.5 gets per-turn and tool-changes", () => {
+    // Native dontAsk capture. Haiku 4.5 does not acquire either beta.
+    const betas = capturedBetasFor({
+        model: "claude-haiku-5-5",
+        thinkingDisplay: "omitted",
+    })
+    const system = betas.indexOf("mid-conversation-system-2026-04-07")
+    assert.deepEqual(betas.slice(system, system + 3), [
+        "mid-conversation-system-2026-04-07",
+        "per-turn-control-2026-07-01",
+        "mid-conversation-tool-changes-2026-07-01",
+    ])
+    assert.equal(supportsLongContextBeta("claude-haiku-5-5"), true)
+    for (const model of [
+        "claude-haiku-4-5",
+        "claude-haiku-4-5-20251001",
+        "claude-haiku-5",
+        "claude-haiku-5-50",
+    ]) {
+        const other = capturedBetasFor({ model })
+        assert.ok(!other.includes("per-turn-control-2026-07-01"), model)
+        assert.ok(
+            !other.includes("mid-conversation-tool-changes-2026-07-01"),
+            model,
+        )
+    }
+    for (const beta of [
+        "inline-tools-2026-09-15",
+        "advisor-tool-2026-03-01",
+        "afk-mode-2026-01-31",
+        "dangerous-tool-use-2026-09-03",
+    ]) {
+        assert.ok(!betas.includes(beta), beta)
+    }
+    const headers = new Headers({
+        "anthropic-beta": "inline-tools-2026-09-15",
+    })
+    mergeCapturedBetas(headers, "claude-haiku-5-5")
+    assert.deepEqual((headers.get("anthropic-beta") ?? "").split(","), [
+        "inline-tools-2026-09-15",
+        ...betas,
+    ])
 })
 
 test("capturedBetasFor: 2.1.288 does not advertise remote or env gates", () => {

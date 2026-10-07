@@ -1,5 +1,51 @@
 # Changelog
 
+# 0.7.10 (2026-10-07) — fork release
+
+### Changed
+
+- **Verified Claude Code 2.1.293 `sdk-cli` fingerprint** with **Pi 1.0.4**.
+  Installed-version discovery stays primary; `FALLBACK_CC_VERSION` is `2.1.293`.
+- **Haiku 5.5 request-beta support:** merge `per-turn-control-2026-07-01` and
+  `mid-conversation-tool-changes-2026-07-01`, matching the native capture.
+  Older Haiku models retain their existing gates. This does **not** register a
+  model or modify Pi's model catalog/configuration.
+- Added the native 2.1.293 suffix vector and Haiku beta regression coverage,
+  including older/malformed model names and preservation of Pi-supplied betas.
+  Pi prompts, tools, request identity, signing algorithms, and OAuth recovery
+  are unchanged.
+
+### Verified
+
+- **87 tests**, TypeScript build, lint/format checks, and `git diff --check` pass.
+- Native non-auto `claude -p` loopback captures on **Sonnet 5, Sonnet 5.5,
+  Opus 5, Opus 5.5, Fable 5.1, Haiku 5.5** reproduce the unchanged cch hash
+  view and suffix algorithm. Suffix **`e51`** for `Reply with exactly: OK`;
+  native Haiku 5.5 cch **`26b25`**. OAuth constants, billing fields, Agent SDK
+  identity, and Stainless `0.128.0` / `v26.3.0` / `600` remain unchanged.
+  Known remote-gated `inline-tools` and `advisor-tool` extras are not made
+  production defaults; Pi's own beta contributions remain additive.
+- Fresh Pi processes loading this checkout's `src/index.ts` pass plain replies
+  and bash tool round-trips on the five existing catalog models (**15 HTTP 200
+  requests**, all final-wire fingerprints verified). Response headers allow
+  plan windows and reject disabled overage. Haiku 5.5 live Pi testing is
+  **pending the user's model-catalog refresh**; native capture and regression
+  tests are not substitutes for that live test.
+- **Billing investigation: inconclusive.** A real
+  `anthropic/claude-sonnet-5-5:high` subagent completed three model turns. Usage
+  before, immediately after, and about six minutes later stayed **5h 0% / 7d
+  44%**; OAuth extra usage was disabled and reported spend stayed **$0**.
+  No attributable plan deduction was observed. Pi's approximately **$0.0955**
+  token-cost estimate is not an invoice. Console/API credit balance was not
+  observed, so no claim is made about its consumption. The separate
+  [monthly API credits policy](https://support.claude.com/en/articles/17154008-monthly-api-credits-for-max-and-team-plans)
+  and [Agent SDK policy](https://support.claude.com/en/articles/15036540-use-the-claude-agent-sdk-with-your-claude-plan)
+  do not by themselves establish this fork's billing route.
+- The 2.1.292 paired billing oracle below is historical evidence, not a new
+  2.1.293 oracle. No 2.1.293 paired negative controls were run. Production
+  retains the existing `sdk-cli` identity; billing remains an open measurement
+  question, documented in [`docs/LANE-MONITORING.md`](docs/LANE-MONITORING.md).
+
 # 0.7.9 (2026-10-06) — fork release
 
 ### Changed
