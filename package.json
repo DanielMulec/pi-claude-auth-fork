@@ -1,6 +1,6 @@
 {
     "name": "@pankajudhas81/pi-claude-auth",
-    "version": "0.7.10",
+    "version": "0.7.11",
     "description": "Pi coding agent extension that uses your Claude Code credentials — no separate login needed.",
     "keywords": [
         "anthropic",
@@ -49,7 +49,7 @@
         "prepublishOnly": "pnpm run build && pnpm test"
     },
     "devDependencies": {
-        "@earendil-works/pi-coding-agent": "^1.0.4",
+        "@earendil-works/pi-coding-agent": "^1.1.0",
         "@types/node": "^25.5.0",
         "oxfmt": "0.41.0",
         "oxlint": "1.56.0",

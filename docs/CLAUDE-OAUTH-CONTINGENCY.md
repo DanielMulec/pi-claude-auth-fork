@@ -9,7 +9,7 @@ Unsupported impersonation of Claude Code. Anthropic may change classification or
 
 ## Current route
 
-Production / canonical line: **v0.7.10** (2.1.293 `sdk-cli` fingerprint; work from `main` / `HEAD`). A `401` `OAuth access token has been revoked` is an auth-store race, not a classifier trigger — re-read Keychain before refreshing.
+Production / canonical line: **v0.7.11** (2.1.296 `sdk-cli` fingerprint; work from `main` / `HEAD`). A `401` `OAuth access token has been revoked` is an auth-store race, not a classifier trigger — re-read Keychain before refreshing.
 
 | Claim                    | Value                                      |
 | ------------------------ | ------------------------------------------ |
@@ -18,11 +18,12 @@ Production / canonical line: **v0.7.10** (2.1.293 `sdk-cli` fingerprint; work fr
 | Turn origin              | `sdk` (when present)                       |
 | Pi system prompt / tools | Unchanged                                  |
 
-**Why:** this coherent bundle keeps Pi’s behavior and passed the 2.1.292 paired
-routing oracle. Real 2.1.293 Pi requests still succeed with plan-allowed and
-overage-rejected headers, but the Sonnet 5.5/high probe showed **no measurable
-plan deduction**. Current plan-vs-Console billing is **inconclusive**; see the
-[2026-10-07 measurement](./LANE-MONITORING.md#current-measurement-2026-10-07).
+**Why:** this coherent bundle keeps Pi’s behavior and passed the 2.1.296 paired
+routing oracle on a real Pi Sonnet 5.5 body. Plain replies and tool continuations
+also pass on all six current models, including Haiku 5.5. However, usage totals
+showed **no measurable plan deduction** and Console credit balance was not
+observed. Plan-vs-Console accounting remains **inconclusive**; see the
+[2026-10-10 verification](./LANE-MONITORING.md#current-verification-2026-10-10).
 
 **Weakness:** Anthropic may meter SDK / `claude -p` / third-party-shaped traffic
 separately. This route is the _working_ costume, not a permanent entitlement.

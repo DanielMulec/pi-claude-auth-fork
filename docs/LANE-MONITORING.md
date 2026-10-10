@@ -18,7 +18,36 @@ when diagnosing third-party routing.
 > keep the older "lane" wording; the script prints the messages you are reading
 > about.
 
-## Current measurement (2026-10-07)
+## Current verification (2026-10-10)
+
+**v0.7.11 / Claude Code 2.1.296 / Pi 1.1.0:** native non-auto `claude -p`
+captures cover Sonnet 5, Sonnet 5.5, Opus 5, Opus 5.5, Fable 5.1, and
+Haiku 5.5. All cch values recompute exactly; suffix `92f`, required betas,
+billing fields, Agent SDK identity, Stainless constants, and OAuth constants
+remain compatible. No production request-shaping change was needed.
+
+Fresh Pi processes loading this checkout pass plain replies and bash tool
+round-trips on all six models (**18 live HTTP 200 requests**, all final-wire
+fingerprints verified). Haiku 5.5 is present in the user's existing catalog;
+its previously pending live test now passes without any model registration or
+user configuration changes.
+
+Three paired replays of a final real-Pi Sonnet 5.5 request discriminate the
+production SDK shape (HTTP 200, plan-window headers) from the test-only
+`cli` + Pi-prompt shape (exact third-party HTTP 400). Production identity stays
+`sdk-cli`. Request ids and native cch values are recorded in
+[`CHANGELOG.md`](../CHANGELOG.md#0711-2026-10-10--fork-release).
+
+**Accounting remains inconclusive:** usage snapshots before testing, after the
+live tests, and after the replay pairs all reported **5h 0% / 7d 46%**. OAuth
+extra usage was disabled, reported spend stayed **$0**, and the weekly breakdown
+remained 100% Claude Code. No attributable plan deduction was observed, and
+Console/API credit balance was not measured. The discriminating routing test
+is stronger evidence than HTTP 200 alone, but not proof of either ledger's
+consumption. This covers main turns and tool continuations, not compaction or
+auxiliary traffic.
+
+## Earlier measurement (2026-10-07)
 
 **v0.7.10 / Claude Code 2.1.293 / Pi 1.0.4:** native non-auto `claude -p`
 captures cover six models, including Haiku 5.5. The only new required beta

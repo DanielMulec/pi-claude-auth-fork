@@ -1,5 +1,53 @@
 # Changelog
 
+# 0.7.11 (2026-10-10) — fork release
+
+### Changed
+
+- **Verified Claude Code 2.1.296 `sdk-cli` fingerprint** with **Pi 1.1.0**.
+  No production request-shaping change was needed. Installed-version discovery
+  stays primary; `FALLBACK_CC_VERSION` is `2.1.296`.
+- **Dev dependency on Pi is `^1.1.0`** (was `^1.0.4`), with the lockfile
+  updated. Added the native 2.1.296 suffix regression vector. Pi prompts, tools,
+  request identity, signing algorithms, OAuth recovery, and beta mapping are
+  unchanged.
+- **Haiku 5.5 is now live-tested** using the user's existing Pi catalog. No
+  model registration or user model-configuration changes were made.
+
+### Verified
+
+- **88 tests**, TypeScript build, lint/format checks, and `git diff --check` pass.
+- Native non-auto `claude -p` loopback captures on **Sonnet 5, Opus 5,
+  Opus 5.5, Fable 5.1, Sonnet 5.5, Haiku 5.5** reproduce cch exactly:
+  `7756c` / `b8d58` / `ac78a` / `ab9aa` / `79493` / `ab202`.
+  Suffix **`92f`** for `Reply with exactly: OK`; billing fields, Agent SDK
+  identity, required betas, and Stainless `0.128.0` / `v26.3.0` / `600` still
+  match. The installed binary retains the suffix salt, OAuth token URL, and
+  client id. No remote-gated beta was added as a production default.
+- Fresh Pi 1.1.0 processes loading this checkout's `src/index.ts`: all six
+  loopback captures verify, and plain replies plus bash tool round-trips pass
+  on all six models (**18 live HTTP 200 requests**). All final-wire fingerprints
+  verify, including both Haiku 5.5 tool-round-trip requests.
+- **Three paired real-Pi routing replays** of a final Sonnet 5.5 body:
+  production SDK shape returns HTTP 200 with plan-window headers; the test-only
+  `cli` + Claude Code identity + `human` persona, retaining Pi's system prompt
+  and recomputing cch, returns the exact third-party HTTP 400 on every pair.
+  Positive request ids: `req_011CftMBgUjCzoE5NVuHkUHA`,
+  `req_011CftMBs9At4iubYcB7U736`, `req_011CftMC3ARixJiWrbxwnvYe`.
+  Negative request ids: `req_011CftMBod5xnCZAgA4wbEj5`,
+  `req_011CftMBybNjy1kvSurTLmzh`, `req_011CftMCBB94zeVHuMVdcFwJ`.
+  Production identity was not changed.
+- **Accounting remains inconclusive:** usage before, after the live tests,
+  and after the replay pairs stayed **5h 0% / 7d 46%**. OAuth extra usage was
+  disabled, reported spend stayed **$0**, and the weekly breakdown stayed
+  100% Claude Code. The paired controls support routing compatibility, not an
+  attributable deduction or proof about Console/API credit consumption.
+  Console balance was not observed. Compaction/auxiliary paths were not tested.
+- Official [2.1.294–2.1.296 changelog](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md)
+  covers hooks, gateways, headless lifecycle, Haiku 5.5 token counting, and
+  Sonnet 5.5 cache-read cost estimates. Native captures and real Pi acceptance,
+  rather than those release notes, establish the fingerprint compatibility.
+
 # 0.7.10 (2026-10-07) — fork release
 
 ### Changed
