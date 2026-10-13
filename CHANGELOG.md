@@ -1,5 +1,26 @@
 # Changelog
 
+# Unreleased
+
+### Changed
+
+- **Verified with Pi 1.2.0.** Dev dependency on Pi is now `^1.2.0` (was
+  `^1.1.0`), lockfile updated. No source change was needed: the extension uses
+  only `registerProvider`, `session_start`, and `before_provider_request`, none
+  of which changed. Pi 1.2.0's breaking `before_agent_start` union does not
+  apply. Its new Anthropic strict-tools fallback retry re-runs `onPayload`
+  (our `before_provider_request` hook) and goes through the patched `fetch`, so
+  a retried request is re-signed like the first.
+
+### Verified
+
+- **88 tests**, TypeScript build, and lint/format checks pass against Pi 1.2.0.
+- Pi 1.2.0 loopback captures through this checkout verify on Sonnet 5, Opus 5,
+  Opus 5.5, Fable 5.1, Sonnet 5.5, and Haiku 5.5 (Claude Code still 2.1.296).
+  Extra betas observed are the already documented Pi-sent ones.
+- Live Pi 1.2.0 plain replies and bash tool round-trips pass on all six models.
+  Usage before and after: **5h 0% / 7d 33%**, extra usage disabled.
+
 # 0.7.11 (2026-10-10) — fork release
 
 ### Changed

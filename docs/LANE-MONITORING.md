@@ -20,6 +20,10 @@ when diagnosing third-party routing.
 
 ## Current verification (2026-10-10)
 
+**Pi 1.2.0 (2026-10-12):** no source change needed. Loopback captures on all
+six models verify, and live plain replies plus bash tool round-trips pass. See
+[`CHANGELOG.md`](../CHANGELOG.md#unreleased).
+
 **v0.7.11 / Claude Code 2.1.296 / Pi 1.1.0:** native non-auto `claude -p`
 captures cover Sonnet 5, Sonnet 5.5, Opus 5, Opus 5.5, Fable 5.1, and
 Haiku 5.5. All cch values recompute exactly; suffix `92f`, required betas,
