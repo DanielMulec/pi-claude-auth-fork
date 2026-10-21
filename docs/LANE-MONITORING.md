@@ -18,7 +18,124 @@ when diagnosing third-party routing.
 > keep the older "lane" wording; the script prints the messages you are reading
 > about.
 
-## Current verification (2026-10-10)
+## Current verification (2026-10-21)
+
+**Claude Code 2.1.306 / Pi 1.3.0:** the request fingerprint is unchanged from
+2.1.304. Paired native API-key `claude -p` captures at 2.1.304 and 2.1.306
+differ only in version string, request ids, and the version suffix; system
+blocks, the 45,560-byte tool array, body keys, betas, and Stainless constants
+are identical. Native suffix `6d4` / cch `4e651` for `Reply with exactly: OK`.
+The no-install fallback advances to `2.1.306`; nothing else in shaping changes.
+
+**Outage and cause (not a classifier change):** the Claude Code Keychain entry
+on this Mac was empty (`claudeAiOauth` with `expiresAt: 0` and blank tokens), so
+the extension found no account and returned before registering the provider and
+the billing-header hook. Pi then sent its own OAuth body with the fork
+`claude-cli/2.1.306 (external, sdk-cli)` user-agent and **no billing header** --
+the half-shape that is billed as third-party. Reproduction and paired control:
+
+| Shape (same Pi body, same token)                   | Result                                       | `request_id`                                                   |
+| -------------------------------------------------- | -------------------------------------------- | -------------------------------------------------------------- |
+| Unshaped (no billing header)                       | HTTP 400 third-party                         | `req_011CgEiEbed7wErfCPo9QRVU`, `req_011CgEiT9g3H3xraoWByctth` |
+| Billing header + Agent SDK identity, `2.1.306.6d4` | HTTP 200 plan, 5h 0.03 / 7d 0.05, no overage | `req_011CgEiShH38Fu3je2T21WUH`                                 |
+| Bash continuation of the shaped request            | HTTP 200 plan                                | `req_011CgEiTyPSF3cQ6f3kW1uRD`                                 |
+
+Final-wire Pi captures after the fix: `cch=5c454` (plain reply), `b70e4` (Bash
+first), `bf8b2` (Bash continuation), all with suffix `6d4` and no beta delta.
+`verify:fingerprint` now fails on a `claude-cli/` user-agent without a billing
+header, so this half-shape cannot pass as "no OAuth-shaped captures found"
+again.
+
+**Credential store is the remaining open item:** the empty Keychain entry means
+native Claude Code itself cannot authenticate ("OAuth session expired and could
+not be refreshed"). Re-login in `claude` restores the shared credential; the
+extension now keeps plan routing working from Pi's own OAuth login in the
+meantime. Why the entry was blanked (revocation vs. a rotated-refresh-token race
+with native Claude Code) is not established. No live refresh was forced, and
+plan-vs-Console attribution is not claimed from single replays.
+
+## Previous verification (2026-10-20)
+
+**Claude Code 2.1.304 / Pi 1.3.0:** six native non-auto captures and a native
+Bash continuation reproduce cch and suffix (`87d`). Required betas, billing
+fields, Agent SDK identity, and Stainless constants remain compatible. Only
+version fallback/test evidence changes; production stays `sdk-cli` and the
+existing OAuth-reliability work is preserved.
+
+Six Pi loopback fingerprints and real plain replies/Bash round-trips on all
+six models pass (18 final-wire requests verified, including every tool result).
+Three paired real-Pi Sonnet 5.5 replays discriminate SDK-positive HTTP 200 with
+plan windows from `cli` + Pi-prompt third-party HTTP 400. Native cch values and
+request ids are recorded in [`CHANGELOG.md`](../CHANGELOG.md#unreleased).
+
+**Accounting attribution remains inconclusive:** account-wide usage moved from
+5h 2% / 7d 70% before live testing to 5h 3% / 7d 70% after replays. Extra usage
+was disabled; `used_credits` was absent. Concurrent traffic was not isolated,
+and Console/API credits were not measured. Compaction, resume, and auxiliary
+traffic were not acceptance-tested. No live refresh was forced.
+
+## Previous verification (2026-10-19)
+
+**Claude Code 2.1.303 / Pi 1.3.0:** six native non-auto captures plus a native
+Bash continuation verify cch and suffix (`f3d`). Required betas, identity,
+billing fields, and Stainless constants remain compatible with the 2.1.302
+working-tree shape. Only the no-install version fallback/test vector advance;
+production persona remains `sdk-cli`.
+
+Six Pi loopback fingerprints and real plain replies/tool round-trips on all
+six models pass (18 final-wire requests, including every tool result). Three
+paired real-Pi Sonnet 5.5 replays discriminate SDK-positive HTTP 200 with plan
+windows from `cli` + Pi-prompt third-party HTTP 400. Request ids and native cch
+values are in [`CHANGELOG.md`](../CHANGELOG.md#unreleased).
+
+**Shared-token reliability is separate from routing:** repeated revoked-token
+401s also required native Claude Code re-login. Two-process tests reproduce
+uncoordinated refreshes; the fork now uses native's refresh lock and re-reads
+inside it. The sync timer also stops publishing credentials from an earlier
+login. See [OAuth reliability](./OAUTH-RELIABILITY.md) for evidence, rollout,
+and the limits of this fix. No live refresh was forced.
+
+**Accounting remains inconclusive:** account-wide usage was 5h 6% / 7d 54%
+before live probes and response-header usage was 5h 8% / 7d 54% at the paired
+replays. Concurrent traffic was not isolated. Extra usage was disabled;
+Console/API credits were not measured. After the post-fix six-model rerun,
+read-only usage was 5h 10% / 7d 55%. Compaction, resume, and auxiliary traffic
+were not acceptance-tested.
+
+## Previous verification (2026-10-18)
+
+**Claude Code 2.1.302 / Pi 1.3.0:** native non-auto `claude -p` captures on
+all six current models, plus a native tool continuation, reproduce cch and
+suffix (`b33`). Billing fields, Agent SDK identity, Stainless constants, OAuth
+URL, and client id remain compatible. Native no longer advertises
+`mid-conversation-system-2026-04-07`: it is a headerless capability in the
+installed binary. The fork stops adding that beta, keeps model-beta ordering,
+and still preserves every Pi-supplied beta. Identity stays `sdk-cli`.
+
+Final-shape Pi plain replies and bash tool round-trips pass on all six models
+(**18 HTTP 200 requests**, every final-wire fingerprint verified). Normal
+configured package discovery also passes. Three paired real-Pi Sonnet 5.5
+replays discriminate production SDK requests (200, plan-window headers) from
+`cli` + Pi-prompt negative controls (exact third-party 400). See
+[`CHANGELOG.md`](../CHANGELOG.md#unreleased) for cch values and request ids.
+
+**Auth incident is separate:** Claude Code itself required re-login. Pi held a
+different saved token pair from the new Keychain login. An isolated Pi run with
+a synthetic expired/invalid credential reproduces `invalid_grant` without the
+fork; loading the fork adopts the fresh Keychain token and succeeds without
+rotating it. A file-storage regression now covers expired and unexpired stale
+in-memory credentials. No OAuth runtime change was needed; the reason the
+original grant was invalidated is not established.
+
+**Accounting attribution remains inconclusive:** account-wide usage rose from
+**5h 6% / 7d 23%** to **5h 10% / 7d 24%** during testing. Extra usage was
+disabled throughout; `used_credits` was absent. Unlike the previous run, plan
+usage did move, but concurrent use was not isolated and Console/API balance
+was not observed. These results establish request compatibility and a
+working routing discriminator, not exclusive attribution to one ledger.
+Compaction, resume, and auxiliary traffic were not acceptance-tested.
+
+## Previous verification (2026-10-10)
 
 **Pi 1.2.0 (2026-10-12):** no source change needed. Loopback captures on all
 six models verify, and live plain replies plus bash tool round-trips pass. See

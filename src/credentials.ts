@@ -20,6 +20,8 @@ import {
 } from "./keychain.ts"
 import { log } from "./logger.ts"
 import { getAuthJsonPath, getPiAgentDir } from "./paths.ts"
+import { withClaudeRefreshLock } from "./refresh-lock.ts"
+import { recordAuthEvent } from "./auth-audit.ts"
 
 export type { ClaudeCredentials } from "./keychain.ts"
 export type { ClaudeAccount } from "./keychain.ts"
@@ -418,17 +420,37 @@ export function refreshIfNeeded(
         expiresIn: creds.expiresAt - Date.now(),
     })
 
-    // Try direct OAuth refresh first (zero LLM tokens consumed)
-    if (creds.refreshToken) {
-        const oauthCreds = refreshViaOAuth(creds.refreshToken, creds.scopes)
-        if (oauthCreds && oauthCreds.expiresAt > Date.now() + 60_000) {
-            oauthCreds.scopes ??= creds.scopes
-            target.credentials = oauthCreds
-            writeBackCredentials(target.source, oauthCreds)
-            return oauthCreds
+    // Native Claude Code and every fork process share this lock. Re-read
+    // AFTER acquiring it: a waiter must adopt the winner, not reuse its token.
+    const outcome = withClaudeRefreshLock(() => {
+        const current = refreshAccount(target.source)
+        if (!current) return { creds: null }
+        target.credentials = current
+        if (current.expiresAt > Date.now() + 60_000) return { creds: current }
+        recordAuthEvent("refresh_begin", target.source, current)
+        const fresh = current.refreshToken
+            ? refreshViaOAuth(current.refreshToken, current.scopes)
+            : null
+        if (!fresh || fresh.expiresAt <= Date.now() + 60_000) {
+            recordAuthEvent("refresh_failed", target.source, current)
+            return { creds: null }
         }
-    }
+        fresh.scopes ??= current.scopes
+        if (!writeBackCredentials(target.source, fresh)) {
+            recordAuthEvent("persistence_failed", target.source, fresh)
+            throw new Error(
+                "Claude OAuth refresh succeeded but credential persistence failed. Re-login in Claude Code; do not reuse the old refresh token.",
+            )
+        }
+        recordAuthEvent("refresh_persisted", target.source, fresh)
+        target.credentials = fresh
+        return { creds: fresh }
+    })
+    // Never bypass a live native lock with an uncoordinated refresh.
+    if (!outcome) return null
+    if (outcome.creds) return outcome.creds
 
+    // CLI fallback must run OUTSIDE the lock: native acquires it itself.
     // Fall back to CLI-based refresh (consumes Haiku tokens)
     log("refresh_fallback_cli", { source: target.source })
     refreshViaCli()
@@ -505,11 +527,16 @@ function defaultRevokedRecoveryDeps(): RevokedRecoveryDeps {
         refresh: (refreshToken, scopes) =>
             refreshViaOAuth(refreshToken, scopes),
         commit: (source, creds) => {
+            if (!writeBackCredentials(source, creds)) {
+                recordAuthEvent("persistence_failed", source, creds)
+                throw new Error(
+                    "Cannot persist recovered Claude credentials. Re-login in Claude Code before retrying.",
+                )
+            }
             const account = getActiveAccount()
             if (account && account.source === source) {
                 account.credentials = creds
             }
-            writeBackCredentials(source, creds)
             syncAuthJson(creds)
             accountCacheMap.set(source, { creds, cachedAt: Date.now() })
         },
@@ -525,29 +552,45 @@ function defaultRevokedRecoveryDeps(): RevokedRecoveryDeps {
  */
 export function recoverRevokedAccessToken(
     failedAccessToken: string,
-    deps: RevokedRecoveryDeps = defaultRevokedRecoveryDeps(),
+    deps?: RevokedRecoveryDeps,
 ): string | null {
+    if (!deps) {
+        return withClaudeRefreshLock(() =>
+            recoverRevokedAccessToken(
+                failedAccessToken,
+                defaultRevokedRecoveryDeps(),
+            ),
+        )
+    }
     const active = deps.readActive()
     if (!active) return null
 
     const external = deps.reread(active.source)
-    const current = external ?? active.credentials
+    // If the source vanished, a prior successful rotation may have failed
+    // persistence. Never fall back to reusing the old single-use refresh token.
+    if (!external) return null
+    const current = external
+    recordAuthEvent("revoked_401", active.source, current)
     if (current.accessToken && current.accessToken !== failedAccessToken) {
         deps.commit(active.source, current)
+        recordAuthEvent("recovery_adopted", active.source, current)
         return current.accessToken
     }
     if (!current.refreshToken) return null
 
+    recordAuthEvent("refresh_begin", active.source, current)
     const fresh = deps.refresh(current.refreshToken, current.scopes)
     if (
         !fresh ||
         !fresh.accessToken ||
         fresh.accessToken === failedAccessToken
     ) {
+        recordAuthEvent("refresh_failed", active.source, current)
         return null
     }
     fresh.scopes ??= current.scopes
     deps.commit(active.source, fresh)
+    recordAuthEvent("refresh_persisted", active.source, fresh)
     return fresh.accessToken
 }
 
@@ -560,7 +603,14 @@ export function getCredentialsForSync(): ClaudeCredentials | null {
     const account = getActiveAccount()
     if (!account) return null
 
-    const creds = account.credentials
+    // A five-minute timer in a long-lived session must not overwrite a
+    // replacement login with its still-unexpired in-memory credential.
+    const creds = refreshAccount(account.source)
+    if (!creds) return null
+    if (creds.accessToken !== account.credentials.accessToken) {
+        recordAuthEvent("sync_adopted", account.source, creds)
+    }
+    account.credentials = creds
     if (creds.expiresAt > Date.now() + 60_000) {
         return creds
     }

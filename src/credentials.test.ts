@@ -1,4 +1,5 @@
 import assert from "node:assert/strict"
+import { execFileSync } from "node:child_process"
 import {
     existsSync,
     mkdirSync,
@@ -36,6 +37,84 @@ afterEach(() => {
     if (prevEnv === undefined) delete process.env.PI_CODING_AGENT_DIR
     else process.env.PI_CODING_AGENT_DIR = prevEnv
     rmSync(dir, { recursive: true, force: true })
+})
+
+test("forceRefreshActiveCredentials: adopts a fresh Claude login before refreshing stale credentials", () => {
+    // A separate HOME keeps this real file-storage path off the user's account.
+    const claudeDir = join(dir, ".claude")
+    mkdirSync(claudeDir)
+    const fresh = {
+        accessToken: "new-login-access",
+        refreshToken: "new-login-refresh",
+        expiresAt: Date.now() + 3_600_000,
+    }
+    writeFileSync(
+        join(claudeDir, ".credentials.json"),
+        JSON.stringify({ claudeAiOauth: fresh }),
+    )
+    const moduleUrl = new URL("./credentials.ts", import.meta.url).href
+    const script = `
+        import assert from "node:assert/strict"
+        import { forceRefreshActiveCredentials, initAccounts, setActiveAccountSource } from ${JSON.stringify(moduleUrl)}
+        for (const expiresAt of [1, Date.now() + 3_600_000]) {
+            initAccounts([{ label: "Claude", source: "file", credentials: {
+                accessToken: "stale-access", refreshToken: "invalid-refresh", expiresAt,
+            } }])
+            setActiveAccountSource("file")
+            assert.deepEqual(forceRefreshActiveCredentials(), {
+                ...${JSON.stringify(fresh)}, subscriptionType: undefined, scopes: undefined,
+            })
+        }
+    `
+    execFileSync(
+        process.execPath,
+        ["--experimental-strip-types", "--input-type=module", "-e", script],
+        {
+            env: { ...process.env, HOME: dir, USERPROFILE: dir },
+            timeout: 5_000,
+            stdio: "pipe",
+        },
+    )
+})
+
+test("getCredentialsForSync: never republishes an old session token after another login", () => {
+    const claudeDir = join(dir, ".claude")
+    mkdirSync(claudeDir)
+    const fresh = {
+        accessToken: "fresh-access",
+        refreshToken: "fresh-refresh",
+        expiresAt: Date.now() + 3_600_000,
+    }
+    writeFileSync(
+        join(claudeDir, ".credentials.json"),
+        JSON.stringify({ claudeAiOauth: fresh }),
+    )
+    const moduleUrl = new URL("./credentials.ts", import.meta.url).href
+    execFileSync(
+        process.execPath,
+        [
+            "--experimental-strip-types",
+            "--input-type=module",
+            "-e",
+            `
+        import assert from "node:assert/strict"
+        import { rmSync } from "node:fs"
+        import { initAccounts, setActiveAccountSource, getCredentialsForSync } from ${JSON.stringify(moduleUrl)}
+        initAccounts([{ label: "test", source: "file", credentials: {
+            accessToken: "old-access", refreshToken: "old-refresh", expiresAt: Date.now() + 7_200_000,
+        } }])
+        setActiveAccountSource("file")
+        assert.equal(getCredentialsForSync()?.accessToken, "fresh-access")
+        rmSync(${JSON.stringify(join(claudeDir, ".credentials.json"))})
+        assert.equal(getCredentialsForSync(), null, "a missing source must not resurrect cached credentials")
+    `,
+        ],
+        {
+            env: { ...process.env, HOME: dir, USERPROFILE: dir },
+            timeout: 5_000,
+            stdio: "pipe",
+        },
+    )
 })
 
 test("parseOAuthResponse: maps a valid token response", () => {

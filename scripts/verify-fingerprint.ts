@@ -123,14 +123,31 @@ for (const path of collect(targets)) {
     } catch {
         continue
     }
+    const headers = new Headers((raw as Capture).headers ?? {})
     const body = parseBody(raw)
     if (body === undefined) continue
     const texts = systemTexts(body)
-    if (!texts[0]?.startsWith(BILLING_PREFIX)) continue
+    if (!texts[0]?.startsWith(BILLING_PREFIX)) {
+        // A capture that claims to be Claude Code without the billing header is
+        // not a capture to skip: it is the exact half-shape Anthropic bills as
+        // third-party. Report it as a failure so a missing header cannot pass
+        // as "no OAuth-shaped captures found".
+        if (/claude-cli\//iu.test(headers.get("user-agent") ?? "")) {
+            checked++
+            failures++
+            console.log(`${path}`)
+            console.log(
+                `  MISMATCH: user-agent claims Claude Code ` +
+                    `(${headers.get("user-agent")}) but the body carries no ` +
+                    `billing header — this request is billed as third-party`,
+            )
+            console.log()
+        }
+        continue
+    }
     checked++
 
     const header = texts[0]
-    const headers = new Headers((raw as Capture).headers ?? {})
     const version = /cc_version=([\d.]+)\./.exec(header)?.[1] ?? "?"
     const nativeSuffix = /cc_version=[\d.]+\.([0-9a-f]{3})/.exec(header)?.[1]
     const entrypoint = /cc_entrypoint=([a-z-]+)/.exec(header)?.[1] ?? "?"

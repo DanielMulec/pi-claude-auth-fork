@@ -1,15 +1,16 @@
 # pi-claude-auth
 
-> **Fork status (v0.7.8):** maintained fork of upstream `pi-claude-auth@0.1.3` (last upstream release 2026-06-04).
+> **Fork status (v0.7.11 + unreleased changes):** maintained fork of upstream `pi-claude-auth@0.1.3` (last upstream release 2026-06-04). Working tree verified with Claude Code **2.1.306** and Pi **1.3.0**.
 > Changes vs upstream:
 >
 > - **Claude Code version is read from the installation, not pinned** — the release number is resolved from `~/.local/share/claude/versions` on every request, so a Claude Code update needs no change here. `ANTHROPIC_CLI_VERSION` remains a manual override, and a constant covers machines with no Claude Code installed (announced on stderr when used)
-> - **`cch` verified through live Claude Code 2.1.289 `sdk-cli`** — seed `4d659218e32a3268`; every string-valued `model` emptied at any depth; hash view drops `max_tokens`/`fallback_credit_token` and keeps `fallbacks` (Pi still strips array `fallbacks` on the wire)
+> - **`cch` verified through live Claude Code 2.1.306 `sdk-cli`** — seed `4d659218e32a3268`; every string-valued `model` emptied at any depth; hash view drops `max_tokens`/`fallback_credit_token` and keeps `fallbacks` (Pi still strips array `fallbacks` on the wire)
 > - **Coherent `sdk-cli` persona** — Agent SDK identity, `cc_turn_origin=sdk`, `cc_prompt_index` / `cc_turn_index`, `x-claude-code-request-class: main`; interactive `cli` is contingency-only
-> - **The current beta fingerprint is merged into pi's, never substituted for it** — 2.1.289 non-auto `--print` common set plus model gates (Sonnet 5.5 matches Fable: per-turn and mid-conversation tool changes); Stainless package `0.128.0`; the fork itself adds no `advisor-tool`, `inline-tools`, `afk-mode`, `dangerous-tool-use`, or bare fallback betas (Pi ≥ 1.0.1 sends `inline-tools` on its own for models with native tool changes, and that is kept); `thinking-display-updates` only when `thinking.display` is `updates`
+> - **The current beta fingerprint is merged into pi's, never substituted for it** — 2.1.306 non-auto `--print` common set plus model gates (Sonnet 5.5 matches Fable: per-turn and mid-conversation tool changes); Stainless package `0.128.0`; the fork itself adds no retired `mid-conversation-system` header, `advisor-tool`, `inline-tools`, `afk-mode`, `dangerous-tool-use`, or bare fallback betas (Pi ≥ 1.0.1 sends `inline-tools` on its own for models with native tool changes, and that is kept); `thinking-display-updates` only when `thinking.display` is `updates`
+> - **Shared-token refresh protection** — respects native Claude Code's refresh lock, re-reads credentials after waiting, and prevents the sync timer from republishing an earlier login; bounded secret-free incident history. See [OAuth reliability](docs/OAUTH-RELIABILITY.md), including the required reload of existing Pi sessions.
 > - **Oracle tooling** — `pnpm run capture` / `verify:fingerprint` / `lane:check -- --replay` (tiny A/B probe is headers-plausible only)
 > - **pi ≥ 0.83 compatibility**: `ModelRegistry.authStorage` (removed in 0.83) is now feature-detected; auth.json seeding + `/login` cover the current session
-> - **Models on the smoke-test list**: `claude-sonnet-5`, `claude-sonnet-5-5`, `claude-opus-5`, `claude-opus-5-5`, `claude-fable-5-1`
+> - **Live plain replies and tool round-trips verified**: `claude-sonnet-5`, `claude-sonnet-5-5`, `claude-opus-5`, `claude-opus-5-5`, `claude-fable-5-1`, `claude-haiku-5-5`
 
 Self-contained Anthropic auth for the [pi coding agent](https://pi.dev) using
 your existing Claude Code credentials — no separate login or API key needed.
@@ -179,7 +180,7 @@ one account is found, the picker is skipped.
 
 | Problem                            | Solution                                                                                                                                                                |
 | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| "No Claude Code credentials found" | Run `claude` to authenticate with Claude Code first                                                                                                                     |
+| "No Claude Code credentials found" | Run `claude` to authenticate with Claude Code first. Requests are still shaped as Claude Code (and stay on plan routing) using Pi's own login until then                |
 | Models missing right after install | On pi ≥ 0.83 the credential lands in `auth.json` for the **next** session: restart pi once, or run `/login` and pick `Claude Code (subscription)` to use it immediately |
 | "Keychain is locked"               | Run `security unlock-keychain ~/Library/Keychains/login.keychain-db`                                                                                                    |
 | "Token expired and refresh failed" | The extension runs the `claude` CLI to refresh automatically. If this fails, re-authenticate by running `claude`                                                        |

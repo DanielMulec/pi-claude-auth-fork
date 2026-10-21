@@ -9,7 +9,15 @@ Unsupported impersonation of Claude Code. Anthropic may change classification or
 
 ## Current route
 
-Production / canonical line: **v0.7.11** (2.1.296 `sdk-cli` fingerprint; work from `main` / `HEAD`). A `401` `OAuth access token has been revoked` is an auth-store race, not a classifier trigger — re-read Keychain before refreshing.
+Production / canonical release: **v0.7.11**; working tree verified against
+**2.1.306 / Pi 1.3.0** (work from `main` / `HEAD`). A `401` `OAuth access token
+has been revoked` is an auth-store issue, not a classifier trigger — re-read
+Keychain before refreshing. Likewise, OAuth `invalid_grant` is not a classifier
+signal; the 2026-10-18 incident required re-login in native Claude Code too.
+
+**2.1.306 changes nothing in the wire shape.** Paired native captures at 2.1.304
+and 2.1.306 differ only in version, request ids, and the version suffix (`87d`
+→ `6d4`). No new header, beta, body field, or identity change to adopt.
 
 | Claim                    | Value                                      |
 | ------------------------ | ------------------------------------------ |
@@ -18,12 +26,19 @@ Production / canonical line: **v0.7.11** (2.1.296 `sdk-cli` fingerprint; work fr
 | Turn origin              | `sdk` (when present)                       |
 | Pi system prompt / tools | Unchanged                                  |
 
-**Why:** this coherent bundle keeps Pi’s behavior and passed the 2.1.296 paired
+**Why:** this coherent bundle keeps Pi’s behavior and passed the 2.1.304 paired
 routing oracle on a real Pi Sonnet 5.5 body. Plain replies and tool continuations
-also pass on all six current models, including Haiku 5.5. However, usage totals
-showed **no measurable plan deduction** and Console credit balance was not
-observed. Plan-vs-Console accounting remains **inconclusive**; see the
-[2026-10-10 verification](./LANE-MONITORING.md#current-verification-2026-10-10).
+also pass on all six current models, including Haiku 5.5. Account-wide plan
+usage rose during testing, but concurrent use was not isolated and Console
+credit balance was not observed. Plan-vs-Console attribution remains
+**inconclusive**; see the
+[2026-10-20 verification](./LANE-MONITORING.md#current-verification-2026-10-20).
+
+Recurring shared-token failures are tracked separately in
+[OAuth reliability](./OAUTH-RELIABILITY.md). The fork now participates in
+native Claude Code's refresh lock and no longer syncs an earlier login from
+session memory. These fix reproduced races; they do not prove the cause of
+every production revocation or eliminate server-side reauthentication.
 
 **Weakness:** Anthropic may meter SDK / `claude -p` / third-party-shaped traffic
 separately. This route is the _working_ costume, not a permanent entitlement.
@@ -31,6 +46,23 @@ separately. This route is the _working_ costume, not a permanent entitlement.
 Do not flip production to interactive `cli` markers while Pi’s system prompt remains in `system[]`.
 
 ## Outage record (authoritative)
+
+| Field        | Value                                                                                                                                                                                                                                               |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| When         | 2026-10-20 ~22:16–22:34Z (recurred 2026-10-21 ~03:50Z)                                                                                                                                                                                              |
+| Where        | Herdr-derived pi sessions under `mulebot-worker-load-gate`                                                                                                                                                                                          |
+| Model        | `claude-opus-5-5` (session default)                                                                                                                                                                                                                 |
+| Error        | `HTTP 400` · `Third-party apps now draw from your extra usage, not your plan limits…`                                                                                                                                                               |
+| `request_id` | `req_011CgEHXHNq7DL1AZRkviehA`, `req_011CgEJSxeThiN91F8p9dg79`, `req_011CgEhdfpRMT91ZRHjbgukZ`                                                                                                                                                      |
+| Cause        | Claude Code's Keychain entry empty (`expiresAt: 0`, blank access/refresh), so the extension skipped provider registration and the billing header. Pi's OAuth body then went out with the `claude-cli/2.1.306` user-agent and **no** billing header. |
+| Recovery     | Shaping no longer depends on stored credentials (`shaping_without_credentials`); re-login in `claude` restores the shared token.                                                                                                                    |
+
+**Paired control (2026-10-21, same Pi body, same token):** unshaped → 400
+`req_011CgEiEbed7wErfCPo9QRVU`; the same body with billing header + Agent SDK
+identity → 200 plan `req_011CgEiShH38Fu3je2T21WUH`. The classifier did not
+change; the client stopped sending half the costume.
+
+## Outage record (2026-09-19)
 
 | Field        | Value                                                                                 |
 | ------------ | ------------------------------------------------------------------------------------- |
@@ -51,8 +83,14 @@ Measured in `e847c39` by replaying **one real Pi request**, one mutation at a ti
 | `cli` + **Claude Code** system prompt                    | Plan pass       |
 | `cli` + CC prompt + **Pi still in another system block** | Third-party 400 |
 | `sdk-cli` + Agent SDK identity + Pi prompt               | Plan pass       |
+| `sdk-cli` UA + Pi prompt, **no billing header**          | Third-party 400 |
+| same body, billing header + Agent SDK identity restored  | Plan pass       |
 
 - Classifier reads **all** system blocks and checks **client claim ↔ prompt coherence**.
+- The last two rows (2026-10-21) show the claim side alone is enough to trip it:
+  an OAuth request that says `claude-cli/…` but carries no billing header is
+  third-party, and adding only the header and identity back makes it plan. So a
+  half-shaped request is **worse than unshaped** and must never be emitted.
 - Tool rename / drop tools / clamp `max_tokens` / `context_management` did **not** rescue `cli` + Pi prompt.
 - Schema 400s (e.g. `fallbacks: Extra inputs are not permitted`) are a **different** failure class from third-party routing.
 
@@ -119,6 +157,13 @@ Reopen interactive-cli work only when **confirmed** with a real Pi request:
 2. SDK-shaped traffic burns **extra usage** while plan windows should apply, or
 3. Anthropic enforces separate SDK / agent billing, or
 4. Daniel explicitly starts the contingency research.
+
+**Trigger 1 fired on 2026-10-21 and did not survive the oracle:** the request
+that got the 400 was _not_ coherent `sdk-cli` — it had the `sdk-cli` user-agent
+and no billing header. Restoring the header on the same body passed. Production
+stays on `sdk-cli`; the real defect was a half-shaped request, now impossible
+because shaping no longer depends on stored credentials. Re-check coherence
+first whenever this trigger appears to fire.
 
 Before declaring trigger: package path, loaded commit, model, account extra-usage state, exact error body, and usage delta.
 

@@ -55,10 +55,10 @@ export function supportsLongContextBeta(model: string | undefined): boolean {
     return typeof model === "string" && !CONTEXT_200K_MODEL.test(model)
 }
 
-// Claude Code's 2.1.288 first-party beta set shared by Fable 5.1, Opus 5,
-// Opus 5.5, Sonnet 5 and Sonnet 5.5 under non-auto `claude -p` / sdk-cli, in
-// wire order, minus the model-gated 1M beta. Re-captured 2026-10-03; the common
-// list is unchanged from 2.1.284.
+// Claude Code's 2.1.302 first-party beta set shared by the six current models
+// under non-auto `claude -p` / sdk-cli, in wire order, minus the model-gated
+// 1M beta. Re-captured 2026-10-18: mid-conversation-system is now a headerless
+// capability in native Claude Code, not an advertised beta.
 // `afk-mode` and `dangerous-tool-use` are auto-mode only (2.1.284 defaults
 // interactive *and* bare `-p` to auto; dontAsk/manual/acceptEdits omit them
 // and the `safeguards` body). `advisor-tool` is a feature gate and is no
@@ -78,7 +78,6 @@ export const CLAUDE_CODE_BETAS = [
     "thinking-token-count-2026-05-13",
     "context-management-2025-06-27",
     "prompt-caching-scope-2026-01-05",
-    "mid-conversation-system-2026-04-07",
     "advanced-tool-use-2025-11-20",
     "effort-2025-11-24",
     "thinking-binding-controls-2026-08-01",
@@ -459,8 +458,8 @@ export function capturedBetasFor(request: CapturedRequestShape): string[] {
     const model = request.model
 
     if (model) {
-        const afterSystem =
-            betas.indexOf("mid-conversation-system-2026-04-07") + 1
+        // Same wire position as native, after the now-headerless system gate.
+        const afterSystem = betas.indexOf("prompt-caching-scope-2026-01-05") + 1
         const systemBetas: string[] = []
         if (PER_TURN_CONTROL_MODEL.test(model)) {
             systemBetas.push("per-turn-control-2026-07-01")

@@ -2,9 +2,199 @@
 
 # Unreleased
 
-### Changed
+### Changed (2026-10-21)
 
-- **Verified with Pi 1.2.0.** Dev dependency on Pi is now `^1.2.0` (was
+- **Request shaping no longer depends on Claude Code credentials.** When no
+  stored Claude Code account carried an access token (empty Keychain
+  `claudeAiOauth`), the extension returned before registering the provider and
+  the billing-header hook. Pi then sent its own OAuth request with the fork's
+  `claude-cli/2.1.306 (external, sdk-cli)` user-agent and **no billing header** —
+  the exact half-shape Anthropic classifies as third-party. Shaping and provider
+  registration now run unconditionally; only account-dependent work (account
+  selection, `auth.json` seeding, sync timer) is skipped, with a warning and a
+  `shaping_without_credentials` audit event.
+- **Verified Claude Code 2.1.306 `sdk-cli`.** Paired native `claude -p` captures
+  at 2.1.304 and 2.1.306 are byte-identical apart from version, request ids and
+  the version suffix: same 4 system blocks, same 45,560-byte tool array, same
+  top-level body keys, same Stainless `0.128.0` / `v26.3.0` / `600`, same betas
+  (API-key captures; the OAuth-only beta pair is unchanged from 2.1.304).
+  Advance the no-install fallback to `2.1.306` and add native suffix vector `6d4`
+  (cch `4e651` on the `Reply with exactly: OK` body). No shape change needed.
+- **`verify:fingerprint` rejects the half-shape.** A capture whose user-agent
+  claims `claude-cli/` but whose body has no billing header now fails instead of
+  being skipped as "not OAuth-shaped" — that combination is billed as
+  third-party, and skipping it hid this outage.
+
+### Verified (Claude Code 2.1.306 / Pi 1.3.0)
+
+- **102 tests**, TypeScript build, lint/format pass.
+- Reproduction with the empty credential store (the state on this Mac): Pi's
+  unshaped request returns HTTP 400 third-party
+  (`req_011CgEiEbed7wErfCPo9QRVU`, re-confirmed `req_011CgEiT9g3H3xraoWByctth`).
+  The **same body plus billing header and Agent SDK identity** returns HTTP 200
+  with plan windows 5h 0.03 / 7d 0.05 and no overage
+  (`req_011CgEiShH38Fu3je2T21WUH`). A Bash first request and its continuation are
+  both shaped and the continuation also passes (`req_011CgEiTyPSF3cQ6f3kW1uRD`).
+  Final-wire Pi captures at `cch=5c454` / `b70e4` / `bf8b2` verify.
+- No live credential refresh was forced, and no plan-to-Console attribution is
+  claimed by these replays (single request ids, no usage delta measured).
+
+### Changed (2026-10-20)
+
+- **Verified Claude Code 2.1.304 `sdk-cli` with Pi 1.3.0.** No request-shaping
+  change is needed from the 2.1.303 working tree. Advance the no-install
+  fallback to `2.1.304` and add native suffix regression vector `87d`.
+  Installed-version discovery, identity, signing algorithms, Pi prompts/tools,
+  and the existing OAuth-reliability changes are unchanged.
+
+### Verified (Claude Code 2.1.304 / Pi 1.3.0)
+
+- **101 tests**, TypeScript build, lint/format, and `git diff --check` pass.
+- Six native non-auto `claude -p --permission-mode dontAsk` captures reproduce
+  cch exactly: Sonnet 5 `b5c8e`, Opus 5 `c7b00`, Opus 5.5 `1b7ab`, Fable 5.1
+  `c344b`, Sonnet 5.5 `6a097`, Haiku 5.5 `b4155`. All reproduce suffix `87d`
+  for `Reply with exactly: OK`. Native Sonnet 5.5 Bash first/continuation
+  captures also verify (`51b92` / `2ddcd`). Billing fields, Agent SDK identity,
+  required betas, and Stainless `0.128.0` / `v26.3.0` / `600` remain compatible.
+  Native remote-gated `advisor-tool` / `inline-tools` do not become fork defaults;
+  Pi-supplied betas are preserved.
+- Six final-wire Pi loopback captures verify. Real Pi plain replies and Bash
+  round-trips pass on all six models: **18 final-wire requests verified**,
+  including every successful tool result. Fresh processes explicitly load this
+  checkout's `src/index.ts` at `904468b` plus working-tree changes.
+- Three paired real-Pi Sonnet 5.5 replays discriminate production SDK HTTP 200
+  with plan-window headers from test-only `cli` + Pi-prompt third-party HTTP
+  400. Positive ids: `req_011CgDwKR9F6yKSTzP13AV7s`,
+  `req_011CgDwKZnu2w5dtqUa6vyx7`, `req_011CgDwKiCfvq7YvcDmaBp92`.
+  Negative ids: `req_011CgDwKX6BLH1A9dJRkawTP`,
+  `req_011CgDwKfSyLmtCAASSvRiHn`, `req_011CgDwKpTT2sKDzQAgyZvb4`.
+- **Accounting attribution remains inconclusive:** account-wide usage moved
+  from 5h 2% / 7d 70% before live testing to 5h 3% / 7d 70% after replays.
+  Extra usage was disabled; `used_credits` was absent. Concurrent traffic was
+  not isolated and Console/API credits were not measured. Compaction, resume,
+  and auxiliary traffic were not acceptance-tested. No live refresh was forced.
+
+### Changed (2026-10-19)
+
+- **Verified Claude Code 2.1.303 `sdk-cli` with Pi 1.3.0.** The request
+  fingerprint is unchanged from the existing 2.1.302 working-tree changes.
+  Advance the no-install fallback to `2.1.303` and add native suffix `f3d`.
+  Installed-version discovery remains primary; persona and signing algorithms
+  are unchanged.
+- **Coordinate shared-token refresh with native Claude Code.** Expiry refresh
+  and revoked-token recovery now acquire native's `.oauth_refresh.lock` using
+  the same `proper-lockfile` protocol (`realpath: false`, 60s stale, 5s update).
+  Re-read storage inside the lock so waiting processes adopt the winner.
+  CLI fallback runs outside the lock to avoid deadlocking native refresh.
+  Lock acquisition is bounded to 5s and fails closed; orphan recovery uses
+  native's stale threshold. Add `proper-lockfile` as a runtime dependency.
+- **Stop the five-minute sync timer from resurrecting an old login.** It now
+  reads the credential source rather than publishing a long-lived session's
+  stale in-memory pair. Missing storage is not replaced from cache.
+- Credential persistence failure after rotation now raises an actionable
+  error rather than silently treating an unpersisted token as healthy.
+- **Always-on, secret-free auth incident history:** daily JSONL under
+  `<pi-agent-dir>/claude-auth-events/`, 14-day retention, 2 MiB/day cap.
+  Includes process id, event, expiry, and SHA-256 token identifiers, never
+  token values or raw HTTP/error bodies. Audit failure cannot break auth.
+  Existing Pi processes must reload/restart to pick up these protections.
+  See [`docs/OAUTH-RELIABILITY.md`](docs/OAUTH-RELIABILITY.md).
+
+### Verified (Claude Code 2.1.303 / Pi 1.3.0)
+
+- **100 tests**, TypeScript build, lint/format, and `git diff --check` pass.
+  Coverage includes real isolated subprocesses racing at expiry and during
+  revoked-token recovery, native-lock contention, orphan recovery, failed
+  operations releasing locks, failed persistence without old-token reuse,
+  stale-session sync, and persistent audit privacy/retention. Before the fix, each race submitted the same single-use
+  refresh token twice; the stale-sync test returned the previous login.
+- Native non-auto `claude -p` captures on Sonnet 5, Opus 5, Opus 5.5, Fable
+  5.1, Sonnet 5.5, and Haiku 5.5 reproduce cch exactly:
+  `7816b` / `916ea` / `77b5e` / `26361` / `af6e7` / `34fe2`. Suffix `f3d`
+  for `Reply with exactly: OK`. A native Bash continuation and six final-wire
+  Pi loopback captures also verify. Billing fields, Agent SDK identity,
+  required betas, Stainless `0.128.0` / `v26.3.0` / `600` are compatible.
+  Native's remote-gated `advisor-tool` / `inline-tools` remain non-defaults.
+- After the auth changes, real Pi plain replies and bash round-trips pass on
+  all six models (18 final-wire requests verified; each continuation includes
+  the tool result). Normal configured package discovery also returns `OK`.
+- Three paired real-Pi Sonnet 5.5 replays: SDK-positive HTTP 200 with plan
+  windows; test-only `cli` + Pi-prompt negative gets the exact third-party
+  HTTP 400. Positive ids: `req_011CgAxer179aRtLGZRVkco9`,
+  `req_011CgAxf4F49GEJfj4sTf1rc`, `req_011CgAxfDsVgYuK4TphS5FmF`.
+  Negative ids: `req_011CgAxez4Y6FtKoPQxJEmi5`,
+  `req_011CgAxfA34xj7kXZhdts8Aq`, `req_011CgAxfP7N4smaZjZRoA8MW`.
+- **Incident evidence:** revoked-token 401s at 2026-10-18 12:10–12:12,
+  20:12, and 2026-10-19 04:10–04:11 UTC; Daniel confirms native Claude Code
+  also required re-login. At 04:13 UTC the replacement Keychain and Pi pairs
+  matched, and read-only usage returned 200. The local race is reproduced;
+  attribution of every production revocation is not established. No live
+  refresh was forced and no native binary was modified.
+- **Accounting remains inconclusive:** account-wide usage went from 5h 6% /
+  7d 54% to response-header 5h 8% / 7d 54% during testing; concurrent use
+  was not isolated. After the additional post-fix runs, read-only usage was
+  5h 10% / 7d 55%. Extra usage was disabled; Console credits were not measured.
+  Compaction, resume, and auxiliary paths were not tested.
+
+### Previously changed (Claude Code 2.1.302 / Pi 1.3.0)
+
+- **Verified Claude Code 2.1.302 `sdk-cli` with Pi 1.3.0 (2026-10-18).**
+  Installed-version discovery stays primary; the no-install fallback advances
+  to `2.1.302`. Dev dependency on Pi is now `^1.3.0`, lockfile updated.
+- **Stop adding `mid-conversation-system-2026-04-07`.** Native 2.1.302
+  `dontAsk` captures omit it on all six models and on a Sonnet 5.5 tool
+  continuation. The installed binary now registers `mid_conversation_system`
+  as a headerless capability (`bR`), not a beta-header capability (`k`). Model
+  beta insertion stays after `prompt-caching-scope`, preserving native order.
+  Pi-supplied betas remain authoritative and are never removed.
+- Add the native 2.1.302 suffix vector, retired-beta/preservation coverage, and
+  a real file-storage regression proving fresh Claude login credentials win
+  over expired or still-unexpired stale in-memory credentials before refresh.
+  OAuth runtime, identity, Pi prompts/tools, signing algorithms, and model
+  registrations are unchanged.
+
+### Previously verified (Claude Code 2.1.302 / Pi 1.3.0)
+
+- **91 tests**, TypeScript build, lint/format, and `git diff --check` pass.
+- Native non-auto `claude -p --permission-mode dontAsk` captures on Sonnet 5,
+  Opus 5, Opus 5.5, Fable 5.1, Sonnet 5.5, and Haiku 5.5 reproduce cch:
+  `ff443` / `02d8e` / `e5648` / `b96ed` / `7e056` / `9322c`. Suffix
+  **`b33`** for `Reply with exactly: OK`. Native tool continuation cch also
+  verifies. Stainless `0.128.0` / `v26.3.0` / `600`, billing fields, Agent SDK
+  identity, OAuth token URL, and client id remain compatible. Remote-gated
+  `inline-tools` / `advisor-tool` are not added as fork defaults.
+- After the beta change, fresh Pi processes loading this checkout pass plain
+  replies and bash tool round-trips on **all six models: 18 live HTTP 200s**,
+  all final-wire fingerprints verified, all six tool results observed in the
+  continuation request. A further Pi turn using normal configured package
+  discovery (not explicit auth-extension loading) also returns `OK`.
+  Checkout: `904468b` plus these working-tree changes; production package path
+  is this repository's `src/index.ts`.
+- Three paired replays of a final real-Pi Sonnet 5.5 body: production SDK shape
+  returns HTTP 200 with plan-window headers; test-only `cli` + CLI identity +
+  `human`, retaining Pi's prompt and recomputing cch, returns the exact
+  third-party HTTP 400 every time. Positive request ids:
+  `req_011Cg9hUMTbsk7rkmWPg7AA6`, `req_011Cg9hUZTADFBCcAbCJhcCo`,
+  `req_011Cg9hUkBLNWDECDa9cFC9i`. Negative request ids:
+  `req_011Cg9hUUz2Vowe1ayrcJiX6`, `req_011Cg9hUgX4RbcMQnLtSFZvq`,
+  `req_011Cg9hUsEVHM7kbvqJ143p4`.
+- **Auth incident:** the user had to log in again in Claude Code too. Before
+  Pi startup, its saved token pair differed from the fresh Keychain pair.
+  In an isolated Pi 1.3.0 agent directory, a synthetic expired/invalid Pi
+  credential reproduces `invalid_grant` without the fork; with the fork, the
+  real request uses the fresh Keychain token and succeeds. Rechecked after
+  the beta change. No OAuth runtime fix was needed. This does not establish
+  why the original grant was invalidated; the original failed token was not
+  replayed after re-login. Real token rotation was not forced.
+- **Accounting:** usage rose from **5h 6% / 7d 23%** before the live runs to
+  **5h 10% / 7d 24%** after the replays. Extra usage remained disabled;
+  `used_credits` was absent, not a measured zero. These are account-wide
+  snapshots, not isolated attribution; Console/API credits were not measured.
+  Compaction, resume, and auxiliary paths were not acceptance-tested.
+
+### Previously changed (Pi 1.2.0)
+
+- **Verified with Pi 1.2.0.** Dev dependency on Pi advanced to `^1.2.0` (from
   `^1.1.0`), lockfile updated. No source change was needed: the extension uses
   only `registerProvider`, `session_start`, and `before_provider_request`, none
   of which changed. Pi 1.2.0's breaking `before_agent_start` union does not
@@ -12,7 +202,7 @@
   (our `before_provider_request` hook) and goes through the patched `fetch`, so
   a retried request is re-signed like the first.
 
-### Verified
+### Previously verified (Pi 1.2.0)
 
 - **88 tests**, TypeScript build, and lint/format checks pass against Pi 1.2.0.
 - Pi 1.2.0 loopback captures through this checkout verify on Sonnet 5, Opus 5,

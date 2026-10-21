@@ -15,6 +15,7 @@ import {
     syncAuthJson,
     type ClaudeCredentials,
 } from "./credentials.ts"
+import { recordAuthEvent } from "./auth-audit.ts"
 import { readAllClaudeAccounts, type ClaudeAccount } from "./keychain.ts"
 import { initLogger, log } from "./logger.ts"
 import {
@@ -138,59 +139,70 @@ const extension = async (pi: ExtensionAPI): Promise<void> => {
     try {
         accounts = readAllClaudeAccounts()
     } catch (err) {
+        // A throw while reading storage must not disable request shaping: an
+        // unshaped request is billed as third-party (see below).
         const error = err instanceof Error ? err.message : String(err)
         log("extension_init_error", { error })
         console.warn(
             "pi-claude-auth: Failed to read Claude Code credentials:",
             error,
         )
-        return
+        accounts = []
     }
 
     initAccounts(accounts)
 
-    if (accounts.length === 0) {
-        log("extension_init_no_accounts", { reason: "no credentials found" })
-        console.warn(
-            "pi-claude-auth: No Claude Code credentials found. Run `claude` to authenticate first.",
-        )
-        return
-    }
-
     const persistedSource = loadPersistedAccountSource()
     const defaultAccount =
-        (persistedSource &&
-            accounts.find((a) => a.source === persistedSource)) ||
-        accounts[0]
+        accounts.find((a) => a.source === persistedSource) ?? accounts[0]
 
-    setActiveAccountSource(defaultAccount.source)
-
-    log("extension_init", {
-        accountCount: accounts.length,
-        sources: accounts.map((a) => a.source),
-        activeSource: defaultAccount.source,
-    })
-
-    // Seed auth.json so pi uses the Claude Code credentials with zero login.
-    const initialCreds = getCachedCredentials()
-    if (initialCreds) {
-        syncAuthJson(initialCreds)
-    } else {
+    if (!defaultAccount) {
+        // Shaping below must still run. When no credential carries an access
+        // token, pi authenticates with whatever OAuth login it already holds,
+        // and the *same* body is accepted when it carries the Claude Code
+        // billing header and rejected as third-party when it does not. Bailing
+        // out here turned an empty credential store into a 400 outage, not a
+        // harmless degradation.
+        log("extension_init_no_accounts", {
+            reason: "no credential carries an access token",
+        })
+        recordAuthEvent("shaping_without_credentials")
         console.warn(
-            "pi-claude-auth: Claude credentials are expired and could not be refreshed. Run `claude` to re-authenticate.",
+            "pi-claude-auth: No usable Claude Code credentials found in the " +
+                "Keychain or ~/.claude/.credentials.json. Requests keep their " +
+                "Claude Code shape, but run `claude` and log in to restore the " +
+                "shared credential.",
         )
-    }
+    } else {
+        setActiveAccountSource(defaultAccount.source)
 
-    // Keep auth.json synced with current credentials (no refresh triggered).
-    const syncTimer = setInterval(() => {
-        try {
-            const creds = getCredentialsForSync()
-            if (creds) syncAuthJson(creds)
-        } catch {
-            // Non-fatal
+        log("extension_init", {
+            accountCount: accounts.length,
+            sources: accounts.map((a) => a.source),
+            activeSource: defaultAccount.source,
+        })
+
+        // Seed auth.json so pi uses the Claude Code credentials with zero login.
+        const initialCreds = getCachedCredentials()
+        if (initialCreds) {
+            syncAuthJson(initialCreds)
+        } else {
+            console.warn(
+                "pi-claude-auth: Claude credentials are expired and could not be refreshed. Run `claude` to re-authenticate.",
+            )
         }
-    }, SYNC_INTERVAL)
-    syncTimer.unref()
+
+        // Keep auth.json synced with current credentials (no refresh triggered).
+        const syncTimer = setInterval(() => {
+            try {
+                const creds = getCredentialsForSync()
+                if (creds) syncAuthJson(creds)
+            } catch {
+                // Non-fatal
+            }
+        }, SYNC_INTERVAL)
+        syncTimer.unref()
+    }
 
     const oauth: OAuthConfig = {
         name: PROVIDER_LABEL,
@@ -204,7 +216,7 @@ const extension = async (pi: ExtensionAPI): Promise<void> => {
             }
 
             const currentSource =
-                loadPersistedAccountSource() ?? defaultAccount.source
+                loadPersistedAccountSource() ?? defaultAccount?.source
             let chosen =
                 latestAccounts.find((a) => a.source === currentSource) ??
                 latestAccounts[0]
@@ -270,13 +282,20 @@ const extension = async (pi: ExtensionAPI): Promise<void> => {
     // from a model's compat flags and broke per-message effort on
     // claude-fable-5-1 / claude-opus-5. The captured set is merged additively at
     // fetch time instead — see `mergeCapturedBetas` in ./signing.ts.
-    pi.registerProvider(PROVIDER_ID, {
-        oauth,
-        headers: {
-            "user-agent": buildUserAgent(),
-            "x-app": "cli",
-        },
-    })
+    //
+    // Registered only with a Claude Code credential behind it: the billing
+    // header below is what keeps plan routing working without one, and it only
+    // fires for OAuth-shaped requests, so a user whose only login is an
+    // Anthropic API key keeps pi's own identity untouched.
+    if (defaultAccount) {
+        pi.registerProvider(PROVIDER_ID, {
+            oauth,
+            headers: {
+                "user-agent": buildUserAgent(),
+                "x-app": "cli",
+            },
+        })
+    }
 
     // Inject the live credential into pi's AuthStorage on every session start.
     // This is what makes pi actually use the Claude Code OAuth token (and

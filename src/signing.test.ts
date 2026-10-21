@@ -180,7 +180,39 @@ test("computeVersionSuffix: live 2.1.296 sdk-cli capture", () => {
     )
 })
 
-test("stainless identity: live 2.1.296 sdk-cli (unchanged from 2.1.288)", () => {
+test("computeVersionSuffix: live 2.1.302 sdk-cli capture", () => {
+    // Native dontAsk claude -p, same prompt on all six current models.
+    assert.equal(
+        computeVersionSuffix("Reply with exactly: OK", "2.1.302"),
+        "b33",
+    )
+})
+
+test("computeVersionSuffix: live 2.1.303 sdk-cli capture", () => {
+    // Native dontAsk claude -p, same prompt on all six current models.
+    assert.equal(
+        computeVersionSuffix("Reply with exactly: OK", "2.1.303"),
+        "f3d",
+    )
+})
+
+test("computeVersionSuffix: live 2.1.304 sdk-cli capture", () => {
+    // Native dontAsk claude -p, all six models and a Bash continuation.
+    assert.equal(
+        computeVersionSuffix("Reply with exactly: OK", "2.1.304"),
+        "87d",
+    )
+})
+
+test("computeVersionSuffix: live 2.1.306 sdk-cli capture", () => {
+    // Native dontAsk claude -p 2.1.306, sonnet-5 (cch 4e651 on the same body).
+    assert.equal(
+        computeVersionSuffix("Reply with exactly: OK", "2.1.306"),
+        "6d4",
+    )
+})
+
+test("stainless identity: live 2.1.304 sdk-cli (unchanged from 2.1.288)", () => {
     assert.equal(CC_SDK_PACKAGE_VERSION, "0.128.0")
     assert.equal(CC_RUNTIME_VERSION, "v26.3.0")
     assert.equal(CC_STAINLESS_TIMEOUT, "600")
@@ -421,9 +453,9 @@ test("mergeCapturedBetas: sets the captured set when pi computed none", () => {
     assert.equal(headers.get("anthropic-beta"), CLAUDE_CODE_BETAS)
 })
 
-test("capturedBetasFor: 2.1.284 sdk-cli sonnet drops auto-mode betas", () => {
-    // Live non-auto claude -p 2.1.284 (dontAsk/manual/acceptEdits). advisor-tool
-    // is gone from default sdk-cli; afk-mode / dangerous-tool-use are auto-only.
+test("capturedBetasFor: 2.1.302 sdk-cli sonnet common betas", () => {
+    // Native dontAsk capture, excluding remote-gated advisor-tool.
+    // Auto-mode betas stay omitted, as in the 2.1.284 baseline.
     assert.deepEqual(
         capturedBetasFor({
             model: "claude-sonnet-5",
@@ -436,7 +468,6 @@ test("capturedBetasFor: 2.1.284 sdk-cli sonnet drops auto-mode betas", () => {
             "thinking-token-count-2026-05-13",
             "context-management-2025-06-27",
             "prompt-caching-scope-2026-01-05",
-            "mid-conversation-system-2026-04-07",
             "advanced-tool-use-2025-11-20",
             "effort-2025-11-24",
             "thinking-binding-controls-2026-08-01",
@@ -461,14 +492,14 @@ test("capturedBetasFor: 2.1.284 Opus 5 keeps tool changes, not per-turn", () => 
 })
 
 test("capturedBetasFor: 2.1.284 Opus 5.5 matches Fable per-turn gate", () => {
-    // Live claude -p 2.1.284 claude-opus-5-5. Inserted after mid-conversation-system.
+    // Model gates unchanged since 2.1.284; 2.1.302 drops the system header.
     const betas = capturedBetasFor({
         model: "claude-opus-5-5",
         thinkingDisplay: "omitted",
     })
-    const system = betas.indexOf("mid-conversation-system-2026-04-07")
+    const system = betas.indexOf("prompt-caching-scope-2026-01-05")
     assert.deepEqual(betas.slice(system, system + 3), [
-        "mid-conversation-system-2026-04-07",
+        "prompt-caching-scope-2026-01-05",
         "per-turn-control-2026-07-01",
         "mid-conversation-tool-changes-2026-07-01",
     ])
@@ -481,9 +512,9 @@ test("capturedBetasFor: 2.1.287 Sonnet 5.5 gets per-turn and tool-changes", () =
         model: "claude-sonnet-5-5",
         thinkingDisplay: "omitted",
     })
-    const system = betas.indexOf("mid-conversation-system-2026-04-07")
+    const system = betas.indexOf("prompt-caching-scope-2026-01-05")
     assert.deepEqual(betas.slice(system, system + 3), [
-        "mid-conversation-system-2026-04-07",
+        "prompt-caching-scope-2026-01-05",
         "per-turn-control-2026-07-01",
         "mid-conversation-tool-changes-2026-07-01",
     ])
@@ -500,9 +531,9 @@ test("capturedBetasFor: 2.1.293 Haiku 5.5 gets per-turn and tool-changes", () =>
         model: "claude-haiku-5-5",
         thinkingDisplay: "omitted",
     })
-    const system = betas.indexOf("mid-conversation-system-2026-04-07")
+    const system = betas.indexOf("prompt-caching-scope-2026-01-05")
     assert.deepEqual(betas.slice(system, system + 3), [
-        "mid-conversation-system-2026-04-07",
+        "prompt-caching-scope-2026-01-05",
         "per-turn-control-2026-07-01",
         "mid-conversation-tool-changes-2026-07-01",
     ])
@@ -536,6 +567,24 @@ test("capturedBetasFor: 2.1.293 Haiku 5.5 gets per-turn and tool-changes", () =>
         "inline-tools-2026-09-15",
         ...betas,
     ])
+})
+
+test("capturedBetasFor: 2.1.302 retires the mid-conversation-system header", () => {
+    const retired = "mid-conversation-system-2026-04-07"
+    for (const model of [
+        "claude-sonnet-5",
+        "claude-opus-5",
+        "claude-opus-5-5",
+        "claude-fable-5-1",
+        "claude-sonnet-5-5",
+        "claude-haiku-5-5",
+    ]) {
+        assert.ok(!capturedBetasFor({ model }).includes(retired), model)
+    }
+    // A Pi-derived feature beta remains authoritative even if native omits it.
+    const headers = new Headers({ "anthropic-beta": retired })
+    mergeCapturedBetas(headers, "claude-sonnet-5-5")
+    assert.ok(headers.get("anthropic-beta")?.split(",").includes(retired))
 })
 
 test("capturedBetasFor: 2.1.288 does not advertise remote or env gates", () => {
