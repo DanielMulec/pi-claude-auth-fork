@@ -9,15 +9,21 @@ Unsupported impersonation of Claude Code. Anthropic may change classification or
 
 ## Current route
 
-Production / canonical release: **v0.7.11**; working tree verified against
-**2.1.306 / Pi 1.3.0** (work from `main` / `HEAD`). A `401` `OAuth access token
-has been revoked` is an auth-store issue, not a classifier trigger — re-read
+Production / canonical release: **v0.7.11**; working tree tested against **2.1.325 / Pi 1.5.2**
+(work from `main` / `HEAD`). A `401` `OAuth
+access token has been revoked` is an auth-store issue, not a classifier trigger — re-read
 Keychain before refreshing. Likewise, OAuth `invalid_grant` is not a classifier
 signal; the 2026-10-18 incident required re-login in native Claude Code too.
 
-**2.1.306 changes nothing in the wire shape.** Paired native captures at 2.1.304
-and 2.1.306 differ only in version, request ids, and the version suffix (`87d`
-→ `6d4`). No new header, beta, body field, or identity change to adopt.
+**2.1.325 keeps the runtime header `v26.12.1`** introduced in 2.1.311.
+Native non-auto `claude -p` captures on seven models reproduce cch and suffix
+`a71`; the Fable 5.2 gate now adds native's per-turn-control beta. Live Pi
+plain replies on seven models and Bash round-trips on Sonnet 5.5 / Fable 5.2
+pass. Manual compaction and fresh-process resume preserve a session marker;
+the auxiliary summarization request also verifies. The 2.1.325 paired replay
+does not discriminate between `sdk-cli` and the `cli` + Pi-prompt control,
+so billing attribution remains inconclusive; no real token refresh was tested.
+See [monitoring](./LANE-MONITORING.md#current-verification-2026-11-14).
 
 | Claim                    | Value                                      |
 | ------------------------ | ------------------------------------------ |
@@ -26,13 +32,13 @@ and 2.1.306 differ only in version, request ids, and the version suffix (`87d`
 | Turn origin              | `sdk` (when present)                       |
 | Pi system prompt / tools | Unchanged                                  |
 
-**Why:** this coherent bundle keeps Pi’s behavior and passed the 2.1.304 paired
-routing oracle on a real Pi Sonnet 5.5 body. Plain replies and tool continuations
-also pass on all six current models, including Haiku 5.5. Account-wide plan
-usage rose during testing, but concurrent use was not isolated and Console
-credit balance was not observed. Plan-vs-Console attribution remains
-**inconclusive**; see the
-[2026-10-20 verification](./LANE-MONITORING.md#current-verification-2026-10-20).
+**Why:** this coherent bundle keeps Pi’s behavior and passed the 2.1.316 paired
+routing oracle on a real Pi Sonnet 5.5 body. On 2.1.325, replies pass on seven
+models, Sonnet 5.5 / Fable 5.2 tool continuations pass, and compaction/resume
+pass, but the paired control does not discriminate. Concurrent use was not
+isolated and Console credit balance was not observed. Plan-vs-Console
+attribution remains **inconclusive**; see the
+[2026-11-14 verification](./LANE-MONITORING.md#current-verification-2026-11-14).
 
 Recurring shared-token failures are tracked separately in
 [OAuth reliability](./OAUTH-RELIABILITY.md). The fork now participates in

@@ -212,9 +212,85 @@ test("computeVersionSuffix: live 2.1.306 sdk-cli capture", () => {
     )
 })
 
-test("stainless identity: live 2.1.304 sdk-cli (unchanged from 2.1.288)", () => {
+test("computeVersionSuffix: live 2.1.308 sdk-cli captures", () => {
+    // Native dontAsk claude -p, all six models and an OAuth Bash continuation.
+    assert.equal(
+        computeVersionSuffix("Reply with exactly: OK", "2.1.308"),
+        "349",
+    )
+})
+
+test("computeVersionSuffix: live 2.1.309 sdk-cli captures", () => {
+    // Native dontAsk claude -p, all six models and an OAuth Bash continuation.
+    assert.equal(
+        computeVersionSuffix("Reply with exactly: OK", "2.1.309"),
+        "a52",
+    )
+})
+
+test("computeVersionSuffix: live 2.1.310 sdk-cli captures", () => {
+    // Native dontAsk claude -p, all six models and an OAuth Bash continuation.
+    assert.equal(
+        computeVersionSuffix("Reply with exactly: OK", "2.1.310"),
+        "621",
+    )
+})
+
+test("computeVersionSuffix: live 2.1.311 sdk-cli captures", () => {
+    // Native dontAsk claude -p, all six models and an OAuth Bash continuation.
+    assert.equal(
+        computeVersionSuffix("Reply with exactly: OK", "2.1.311"),
+        "427",
+    )
+})
+
+test("computeVersionSuffix: live 2.1.314 sdk-cli captures", () => {
+    // Native dontAsk claude -p, all six models and an OAuth Bash continuation.
+    assert.equal(
+        computeVersionSuffix("Reply with exactly: OK", "2.1.314"),
+        "48c",
+    )
+})
+
+test("computeVersionSuffix: native 2.1.316 sdk-cli captures", () => {
+    assert.equal(
+        computeVersionSuffix("Reply with exactly: OK", "2.1.316"),
+        "17c",
+    )
+})
+
+test("computeVersionSuffix: native 2.1.318 sdk-cli captures", () => {
+    assert.equal(
+        computeVersionSuffix("Reply with exactly: OK", "2.1.318"),
+        "033",
+    )
+})
+
+test("computeVersionSuffix: native 2.1.319 sdk-cli captures", () => {
+    assert.equal(
+        computeVersionSuffix("Reply with exactly: OK", "2.1.319"),
+        "cb2",
+    )
+})
+
+test("computeVersionSuffix: native 2.1.321 sdk-cli captures", () => {
+    assert.equal(
+        computeVersionSuffix("Reply with exactly: OK", "2.1.321"),
+        "97f",
+    )
+})
+
+test("computeVersionSuffix: native 2.1.325 sdk-cli captures", () => {
+    // Six native dontAsk claude -p captures and a Bash tool-result continuation.
+    assert.equal(
+        computeVersionSuffix("Reply with exactly: OK", "2.1.325"),
+        "a71",
+    )
+})
+
+test("stainless identity: live 2.1.314 sdk-cli", () => {
     assert.equal(CC_SDK_PACKAGE_VERSION, "0.128.0")
-    assert.equal(CC_RUNTIME_VERSION, "v26.3.0")
+    assert.equal(CC_RUNTIME_VERSION, "v26.12.1")
     assert.equal(CC_STAINLESS_TIMEOUT, "600")
 })
 
@@ -368,6 +444,7 @@ test("computeCchFromBody: keeps fallbacks, drops max_tokens", () => {
 
 test("applyClaudeCodeHeaderFidelity: stainless identity + 1M beta", () => {
     const headers = new Headers({
+        "x-stainless-runtime-version": "v26.3.0",
         "anthropic-beta":
             "claude-code-20250219,oauth-2025-04-20,effort-2025-11-24",
     })
@@ -379,6 +456,8 @@ test("applyClaudeCodeHeaderFidelity: stainless identity + 1M beta", () => {
         headers.get("x-stainless-package-version"),
         CC_SDK_PACKAGE_VERSION,
     )
+    assert.equal(headers.get("x-stainless-runtime-version"), "v26.12.1")
+    assert.equal(headers.get("x-stainless-timeout"), "600")
     assert.equal(headers.get("x-claude-code-request-class"), CC_REQUEST_CLASS)
     assert.equal(headers.has("x-cc-atis"), false)
     assert.equal(
@@ -453,7 +532,26 @@ test("mergeCapturedBetas: sets the captured set when pi computed none", () => {
     assert.equal(headers.get("anthropic-beta"), CLAUDE_CODE_BETAS)
 })
 
-test("capturedBetasFor: 2.1.302 sdk-cli sonnet common betas", () => {
+test("capturedBetasFor: 2.1.319 provenance beta on all six native models", () => {
+    for (const model of [
+        "claude-sonnet-5",
+        "claude-sonnet-5-5",
+        "claude-opus-5",
+        "claude-opus-5-5",
+        "claude-fable-5-1",
+        "claude-haiku-5-5",
+    ]) {
+        const beta = "tool-provenance-2026-10-26"
+        const headers = new Headers({ "anthropic-beta": `pi-feature,${beta}` })
+        mergeCapturedBetas(headers, { model })
+        const betas = (headers.get("anthropic-beta") ?? "").split(",")
+        assert.equal(betas.filter((item) => item === beta).length, 1, model)
+        assert.ok(capturedBetasFor({ model }).includes(beta), model)
+        assert.ok(betas.includes("pi-feature"), model)
+    }
+})
+
+test("capturedBetasFor: 2.1.319 sdk-cli sonnet common betas", () => {
     // Native dontAsk capture, excluding remote-gated advisor-tool.
     // Auto-mode betas stay omitted, as in the 2.1.284 baseline.
     assert.deepEqual(
@@ -468,6 +566,7 @@ test("capturedBetasFor: 2.1.302 sdk-cli sonnet common betas", () => {
             "thinking-token-count-2026-05-13",
             "context-management-2025-06-27",
             "prompt-caching-scope-2026-01-05",
+            "tool-provenance-2026-10-26",
             "advanced-tool-use-2025-11-20",
             "effort-2025-11-24",
             "thinking-binding-controls-2026-08-01",
@@ -503,6 +602,33 @@ test("capturedBetasFor: 2.1.284 Opus 5.5 matches Fable per-turn gate", () => {
         "per-turn-control-2026-07-01",
         "mid-conversation-tool-changes-2026-07-01",
     ])
+})
+
+test("capturedBetasFor: native 2.1.325 Fable 5.2 matches Fable 5.1", () => {
+    // Native non-auto sdk-cli capture: both model-gated betas, in wire order.
+    const expected = capturedBetasFor({ model: "claude-fable-5-1" })
+    for (const model of ["claude-fable-5-2", "claude-fable-5-2-20261114"]) {
+        assert.deepEqual(capturedBetasFor({ model }), expected, model)
+        const headers = new Headers({ "anthropic-beta": "pi-feature" })
+        mergeCapturedBetas(headers, model)
+        assert.deepEqual(
+            (headers.get("anthropic-beta") ?? "").split(","),
+            ["pi-feature", ...expected],
+            model,
+        )
+    }
+    for (const model of [
+        "claude-fable-5",
+        "claude-fable-5-20",
+        "claude-fable-5-3",
+    ]) {
+        assert.ok(
+            !capturedBetasFor({ model }).includes(
+                "per-turn-control-2026-07-01",
+            ),
+            model,
+        )
+    }
 })
 
 test("capturedBetasFor: 2.1.287 Sonnet 5.5 gets per-turn and tool-changes", () => {

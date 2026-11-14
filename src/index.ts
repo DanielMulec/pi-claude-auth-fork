@@ -132,7 +132,7 @@ function applyCredential(ctx: ExtensionContext): boolean {
  */
 const extension = async (pi: ExtensionAPI): Promise<void> => {
     initLogger()
-    installClaudeCodeFetchPatch()
+    installClaudeCodeFetchPatch(injectBillingHeader)
     const identity = discoverClaudeCodeIdentity()
 
     let accounts: ClaudeAccount[] = []

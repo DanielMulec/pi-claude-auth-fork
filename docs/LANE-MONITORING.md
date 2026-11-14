@@ -18,7 +18,210 @@ when diagnosing third-party routing.
 > keep the older "lane" wording; the script prints the messages you are reading
 > about.
 
-## Current verification (2026-10-21)
+## Current verification (2026-11-14)
+
+**Claude Code 2.1.325 / Pi 1.5.2:** seven native non-auto `sdk-cli`
+loopback captures plus a Sonnet 5.5 Bash continuation reproduce cch, suffix
+`a71`, identity, and Stainless headers. Fable 5.2's native capture reveals a
+missing `per-turn-control-2026-07-01` beta; the model gate now includes it,
+with a regression test that fails before the fix. Other captured model gates
+and signing algorithms remain unchanged. The no-install fallback advances to
+2.1.325; installed-version discovery still takes precedence.
+
+After the fix, live Pi plain replies pass on seven models and Bash round-trips
+pass on Sonnet 5.5 and Fable 5.2 (**11 verified final-wire requests**). Manual
+compaction preserves a session marker and a fresh process resumes the compacted
+session and recalls it (**five verified lifecycle requests**, including the
+auxiliary summarization call). Every request returns HTTP 200. A genuine native
+Claude Code Sonnet 5.5 live reply also passes.
+
+Three paired replays of a real Pi Sonnet 5.5 body return HTTP 200 with weekly
+window headers for both `sdk-cli` and `cli` + Pi-prompt controls. The control
+does not discriminate: classifier discrimination and billing attribution remain
+**inconclusive**. Extra usage remains disabled; before/after rounded weekly
+usage is 28% overall / 24% Fable and reported usage-credit spend is $0.
+Concurrent traffic and Console/API credits were not isolated or measured.
+Tests explicitly load this checkout with isolated homes/agent directories,
+stubbed Keychain, an existing token, and explicit version override; no live
+refresh or shared credential writes. Temporary live auth was removed.
+See [`CHANGELOG.md`](../CHANGELOG.md#unreleased); redacted evidence is under
+`/tmp/cc325-check/`.
+
+## Previous verification (2026-11-09)
+
+**Claude Code 2.1.321:** six native non-auto `sdk-cli` loopback captures and
+one Sonnet 5.5 Bash continuation match the fork's cch, suffix `97f`, beta
+sets, identity, and Stainless headers. An isolated Pi 1.5.0 Sonnet 5.5
+request also verifies at the loopback boundary. The no-install fallback
+advances to 2.1.321.
+
+Live Pi plain replies passed on six models; a Sonnet 5.5 Bash round-trip
+also passed. All eight requests verified at the final wire and returned HTTP
+200, weekly window `allowed`, and overage `rejected`. Three paired replays
+returned HTTP 200 for both `sdk-cli` and `cli` + Pi-prompt controls, so the
+control did not discriminate and billing attribution remains inconclusive.
+Extra usage was disabled; rounded weekly usage stayed at 9% overall / 3% Fable.
+Concurrent use and Console credits were not isolated or measured. Live checks
+used an isolated home and agent directory, existing token, stubbed Keychain,
+and explicit version override. Live refresh, compaction, resume, and auxiliary
+traffic were not tested. See the [`CHANGELOG.md`](../CHANGELOG.md#unreleased).
+
+## Previous verification (2026-11-08)
+
+**Claude Code 2.1.319 / Pi 1.5.0:** native loopback captures on six models
+and a Bash continuation reproduce cch, suffix `cb2`, identity, betas, and
+Stainless headers. The fork now adds native's `tool-provenance-2026-10-26`
+beta. Native live plain and Bash turns pass. After the changes, six live Pi
+plain replies, a Sonnet 5.5 Bash round-trip, and manual compaction pass;
+eight ordinary final-wire requests and six compaction-run requests verify.
+A two-process Pi session resume also passes. Compaction exposed and verified a
+fix for two auxiliary requests previously missing billing headers.
+
+Three paired real-Pi replays both before and after the fix gave HTTP 200 and
+weekly window headers for `sdk-cli` and the `cli` + Pi-prompt negative controls. The oracle did
+not discriminate; attribution remains **inconclusive**. Extra usage was
+disabled, weekly usage was 3% overall / 0% Fable, and Console credit balance
+and concurrent use were not isolated. Live refresh and the complete semantics
+of the undocumented beta remain unverified. See
+[`CHANGELOG.md`](../CHANGELOG.md#unreleased).
+
+## Previous verification (2026-10-31)
+
+**Claude Code 2.1.316 / Pi 1.4.0:** six native non-auto `sdk-cli` loopback
+captures verify cch, suffix `17c`, OAuth betas, Agent SDK identity, and
+Stainless constants. Live Pi plain replies on all six models and a Sonnet 5.5
+Bash continuation succeed, with all eight final-wire Pi requests verified.
+Three real-Pi paired replays distinguish HTTP 200 with weekly plan-window
+headers from `cli` + Pi-prompt third-party HTTP 400. Only the no-install
+fallback and regression vector change; installed discovery remains primary.
+See the [`CHANGELOG.md`](../CHANGELOG.md#unreleased) for scope and request IDs.
+
+**Accounting attribution remains inconclusive.** Extra usage was disabled;
+rounded account-wide weekly usage stayed at 24% overall and 33% Fable before
+and after the live Pi calls and initial replay. Concurrent traffic and Console
+credits were not isolated or measured. No live refresh was forced; compaction,
+resume, auxiliary traffic, and native tool continuation were not tested.
+
+## Previous verification (2026-10-30)
+
+**Claude Code 2.1.314 / installed Pi 1.4.0:** native non-auto `sdk-cli`
+loopback captures on six models with synthetic OAuth credentials reproduce cch
+and suffix `48c`; betas, billing fields, Agent SDK identity, and Stainless
+`0.128.0` / `v26.12.1` / `600` match. A native Sonnet 5.5 Bash continuation
+also verifies (**8 native requests**). Six Pi plain replies and a Sonnet 5.5
+Bash round-trip produce **8 verified final-wire Pi requests** with successful
+Bash execution. Only the no-install fallback and regression evidence advance;
+installed-version discovery remains primary. Details are in the
+[`CHANGELOG.md`](../CHANGELOG.md#unreleased).
+
+Live Pi plain replies pass on all six models, and a Sonnet 5.5 Bash round-trip
+succeeds (**8 final-wire requests verified**). Three paired replays of a real
+Pi Sonnet 5.5 body returned HTTP 200 with allowed plan windows for `sdk-cli`
+and the exact third-party HTTP 400 for `cli` + Pi-prompt controls. Request IDs
+are in the changelog.
+
+**Accounting attribution remains inconclusive:** extra usage was disabled and
+account-wide rounded usage stayed at 5h 0%, 7d 24%, and Fable 33% before and
+after. Concurrent traffic was not isolated; Console/API credit balance was not
+measured. A fresh existing access token was used without refresh, with isolated
+Pi home and agent directory and stubbed Keychain access. Temporary live auth was
+removed. Compaction, resume, auxiliary traffic, and live token refresh remain
+untested.
+
+## Previous verification (2026-10-27)
+
+**Claude Code 2.1.311 / installed Pi 1.4.0:** native `sdk-cli` now reports
+runtime **`v26.12.1`**, replacing `v26.3.0`. Update that Stainless header
+constant and the no-install fallback; installed-version resolution already
+selects `2.1.311`. Signing algorithms, OAuth beta mappings, billing fields,
+Agent SDK identity, SDK package `0.128.0`, and timeout `600` remain compatible.
+Native non-auto loopback captures on all six models with API-key and synthetic
+OAuth credentials reproduce cch and suffix `427`, including a Sonnet 5.5 Bash
+continuation (**14 native requests**). Six Pi plain replies and a Sonnet 5.5
+Bash round-trip produce **8 verified final-wire Pi requests** with the new
+runtime header and a successful tool result. Pi's optional betas are retained.
+**106 tests**, build, and lint/format pass. Native cch values and verification
+scope are recorded in [`CHANGELOG.md`](../CHANGELOG.md#unreleased).
+
+**Offline fingerprint evidence, not a new routing or billing measurement.**
+Inference requests went to loopback using placeholder credentials, with
+isolated homes, Pi agent directories, and stubbed Keychain access. No real
+credential refresh, live routing oracle, plan-window deduction, or Console/API
+credit attribution was tested. Compaction, resume, and auxiliary traffic
+remain untested. The 2026-10-24 live routing evidence below is historical.
+
+## Previous verification (2026-10-24)
+
+**Claude Code 2.1.310 / installed Pi 1.4.0:** no request-shaping change needed.
+Native non-auto `claude -p` loopback captures on all six models, with API-key
+and synthetic OAuth credentials, reproduce cch and suffix `621`. OAuth betas,
+billing fields, Agent SDK identity, and Stainless constants match the fork.
+Native and Pi Sonnet 5.5 Bash continuations also verify. Installed-version
+resolution already selects `2.1.310`; only the no-install fallback and
+regression evidence change. **105 tests**, build, and lint/format pass.
+
+Live Pi plain replies and Bash round-trips pass on all six models (**18 HTTP
+200 requests**, every final-wire fingerprint and successful tool result
+verified). Three paired real-Pi Sonnet 5.5 replays discriminate SDK HTTP 200
+with plan-window headers from `cli` + Pi-prompt controls returning the exact
+third-party HTTP 400. Request ids and native cch values are recorded in
+[`CHANGELOG.md`](../CHANGELOG.md#unreleased).
+
+**Accounting attribution remains inconclusive:** before testing, after live
+turns, and after replays, usage stayed at **5h 2% / 7d 26%**, extra usage was
+disabled, and reported usage-credit spend was **$0**. Concurrent traffic was
+not isolated; Console/API credit balance was not measured. No live refresh
+was forced: tests used a fresh existing access token with Pi's home, agent
+directory, and Keychain access isolated. Compaction, resume, auxiliary traffic,
+and live token refresh remain untested.
+
+## Previous verification (2026-10-23)
+
+**Claude Code 2.1.309 / installed Pi 1.4.0:** no request-shaping change needed.
+Native non-auto `claude -p` loopback captures on all six models, with API-key
+and synthetic OAuth credentials, reproduce cch and suffix `a52`. OAuth betas,
+billing fields, Agent SDK identity, and Stainless constants match the fork.
+Native and Pi Sonnet 5.5 Bash continuations also verify. Only the no-install
+fallback and regression evidence advance; installed-version discovery already
+selects `2.1.309`. **104 tests**, build, and lint/format pass.
+
+Fresh live Pi processes loading this checkout pass plain replies and Bash
+round-trips on all six models (**18 HTTP 200 requests**, every final-wire
+fingerprint and successful tool result verified). Three paired real-Pi Sonnet
+5.5 replays discriminate production SDK HTTP 200 with plan-window headers from
+`cli` + Pi-prompt controls returning the exact third-party HTTP 400. Extra
+usage remained disabled. Request ids and native cch values are recorded in
+[`CHANGELOG.md`](../CHANGELOG.md#unreleased).
+
+**Accounting attribution remains inconclusive:** usage snapshots before live
+tests, after them, and after replays all reported **5h 5% / 7d 26%**, usage-credit
+spend **$0**, and a weekly breakdown of 100% Claude Code. Concurrent traffic was
+not isolated; Console/API credit balance was not measured. The routing oracle
+is discriminating, but unchanged rounded usage is not proof of either ledger's
+deduction. Live checks read a fresh existing access token without refreshing it;
+Pi's test home, agent directory, and Keychain access were isolated. Compaction,
+resume, auxiliary traffic, and live token refresh remain untested.
+
+## Previous verification (2026-10-22)
+
+**Claude Code 2.1.308 / installed Pi 1.4.0:** no request-shaping change needed.
+Native non-auto `claude -p` captures cover all six current models with both
+API-key and synthetic OAuth credentials. All cch values and suffix `349`
+reproduce exactly; OAuth beta mappings, billing fields, Agent SDK identity,
+and Stainless constants match the fork. Native and Pi Sonnet 5.5 Bash
+continuations also verify. Six Pi plain-reply captures plus the Bash round-trip
+produce **8 verified final-wire Pi requests**. Pi's optional betas are preserved.
+Only the no-install fallback and regression evidence change; installed-version
+discovery already selects `2.1.308`. **103 tests**, build, and lint/format pass.
+
+**This is offline fingerprint evidence, not a new billing measurement.**
+Inference requests used loopback and placeholder credentials, with Pi's home,
+agent directory, and Keychain access isolated. No real credential refresh,
+live routing oracle, plan-window deduction, or Console/API credit attribution
+was tested. Compaction, resume, and auxiliary traffic remain untested. The
+2026-10-21 paired live routing evidence below is historical, not re-run here.
+
+## Previous verification (2026-10-21)
 
 **Claude Code 2.1.306 / Pi 1.3.0:** the request fingerprint is unchanged from
 2.1.304. Paired native API-key `claude -p` captures at 2.1.304 and 2.1.306

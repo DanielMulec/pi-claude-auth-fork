@@ -28,10 +28,11 @@ export const CC_TURN_INDEX = 1
 
 // SDK/runtime identity Claude Code reports in X-Stainless-* headers. The package
 // version moved 0.112.1 → 0.127.0 in 2.1.285 and 0.127.0 → 0.128.0 in 2.1.288.
-// Runtime and timeout are unchanged since 2.1.266. These do not move every
-// release. pi's own SDK version is a different fingerprint, so this override stays.
+// Runtime moved v26.3.0 → v26.12.1 in 2.1.311; timeout is unchanged since
+// 2.1.266. These do not move every release. pi's own SDK/runtime versions are
+// different fingerprints, so these overrides stay.
 export const CC_SDK_PACKAGE_VERSION = "0.128.0"
-export const CC_RUNTIME_VERSION = "v26.3.0"
+export const CC_RUNTIME_VERSION = "v26.12.1"
 export const CC_STAINLESS_TIMEOUT = "600"
 export const AGENT_SDK_IDENTITY =
     "You are a Claude agent, built on Anthropic's Claude Agent SDK."
@@ -55,9 +56,10 @@ export function supportsLongContextBeta(model: string | undefined): boolean {
     return typeof model === "string" && !CONTEXT_200K_MODEL.test(model)
 }
 
-// Claude Code's 2.1.302 first-party beta set shared by the six current models
-// under non-auto `claude -p` / sdk-cli, in wire order, minus the model-gated
-// 1M beta. Re-captured 2026-10-18: mid-conversation-system is now a headerless
+// Claude Code's first-party beta set shared by the six current models under
+// non-auto `claude -p` / sdk-cli, minus the model-gated 1M beta. Native
+// 2.1.319 adds tool-provenance to all six and to a Bash continuation.
+// Re-captured 2026-10-18: mid-conversation-system is now a headerless
 // capability in native Claude Code, not an advertised beta.
 // `afk-mode` and `dangerous-tool-use` are auto-mode only (2.1.284 defaults
 // interactive *and* bare `-p` to auto; dontAsk/manual/acceptEdits omit them
@@ -78,6 +80,7 @@ export const CLAUDE_CODE_BETAS = [
     "thinking-token-count-2026-05-13",
     "context-management-2025-06-27",
     "prompt-caching-scope-2026-01-05",
+    "tool-provenance-2026-10-26",
     "advanced-tool-use-2025-11-20",
     "effort-2025-11-24",
     "thinking-binding-controls-2026-08-01",
@@ -97,9 +100,9 @@ export const THINKING_DISPLAY_UPDATES = "updates"
 // and per-turn control. Older Haiku models keep their existing gates.
 const MID_CONVERSATION_TOOL_CHANGE_MODEL =
     /^claude-(?:fable-5(?:-1)?|opus-(?:4-8|5)|sonnet-5-5|haiku-5-5)(?:-|$)/
-/** Live 2.1.293 sdk-cli: Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5. Not Opus 5 / Sonnet 5. */
+/** Native sdk-cli through 2.1.325: Fable 5.1/5.2, Opus 5.5, Sonnet 5.5, Haiku 5.5. Not Opus 5 / Sonnet 5. */
 const PER_TURN_CONTROL_MODEL =
-    /^claude-(?:fable-5-1|opus-5-5|sonnet-5-5|haiku-5-5)(?:-|$)/
+    /^claude-(?:fable-5-(?:1|2)|opus-5-5|sonnet-5-5|haiku-5-5)(?:-|$)/
 
 /**
  * The Claude Code release this request claims to be.
@@ -574,7 +577,9 @@ export function setActiveSessionId(sessionId: string | undefined): void {
 }
 
 /** Patch global fetch so cch is computed on the final SDK JSON body. */
-export function installClaudeCodeFetchPatch(): void {
+export function installClaudeCodeFetchPatch(
+    shapeAuxiliary: (payload: unknown) => unknown | undefined,
+): void {
     if (fetchPatched) return
     fetchPatched = true
     const original = globalThis.fetch.bind(globalThis)
@@ -599,12 +604,50 @@ export function installClaudeCodeFetchPatch(): void {
             headers.set("x-claude-code-session-id", activeSessionId)
         }
 
-        const serializedBody =
+        let serializedBody =
             typeof init?.body === "string"
                 ? init.body
                 : input instanceof Request
                   ? await input.clone().text()
                   : undefined
+        // Pi's compaction bypasses before_provider_request; other auxiliary
+        // calls may do so too. At the last wire boundary, shape only unshaped
+        // bodies; already-shaped main turns retain their original prompt ID.
+        if (serializedBody !== undefined) {
+            let parsed: unknown
+            try {
+                const target = new URL(url)
+                if (
+                    target.protocol === "https:" &&
+                    target.host === "api.anthropic.com" &&
+                    target.pathname === "/v1/messages"
+                ) {
+                    parsed = JSON.parse(serializedBody) as unknown
+                }
+            } catch {
+                // An invalid URL or non-JSON body is not a Messages payload.
+            }
+            if (
+                parsed &&
+                typeof parsed === "object" &&
+                !Array.isArray(parsed)
+            ) {
+                const system = (parsed as { system?: unknown }).system
+                const first = Array.isArray(system) ? system[0] : undefined
+                const text =
+                    first && typeof first === "object"
+                        ? (first as { text?: unknown }).text
+                        : undefined
+                if (
+                    typeof text !== "string" ||
+                    !text.startsWith("x-anthropic-billing-header:")
+                ) {
+                    const shaped = shapeAuxiliary(parsed)
+                    if (shaped !== undefined)
+                        serializedBody = JSON.stringify(shaped)
+                }
+            }
+        }
         applyClaudeCodeHeaderFidelity(headers, serializedBody)
         mergeCapturedBetas(
             headers,
