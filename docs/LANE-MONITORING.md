@@ -18,7 +18,26 @@ when diagnosing third-party routing.
 > keep the older "lane" wording; the script prints the messages you are reading
 > about.
 
-## Current verification (2026-11-14)
+## Current verification (2026-11-16)
+
+**Claude Code 2.1.326 / Pi 1.5.2:** seven native non-auto loopback captures
+and a Sonnet 5.5 Bash continuation match cch, suffix `fc9`, identity,
+model-specific betas, and Stainless headers. The no-install fallback advances
+without changing the request-shaping algorithms. Live Pi plain replies pass
+on seven models, a Sonnet 5.5 Bash round-trip passes, and a fresh process
+resumes a session and recalls its marker. All eleven final-wire requests verify
+and return HTTP 200. A native Sonnet 5.5 live reply also passes.
+
+Three paired replays of a real Pi request returned HTTP 200 for both SDK and
+`cli` + Pi-prompt controls. The negative control did not discriminate, so
+classifier discrimination and billing attribution remain **inconclusive**.
+Extra usage was disabled and rounded weekly usage stayed at 46% overall /
+20% Fable; concurrent use and Console credits were not isolated or measured.
+No live refresh, manual compaction or auxiliary traffic was tested. See
+[`CHANGELOG.md`](../CHANGELOG.md#unreleased); evidence is under
+`/tmp/cc326-check/`.
+
+## Previous verification (2026-11-14)
 
 **Claude Code 2.1.325 / Pi 1.5.2:** seven native non-auto `sdk-cli`
 loopback captures plus a Sonnet 5.5 Bash continuation reproduce cch, suffix

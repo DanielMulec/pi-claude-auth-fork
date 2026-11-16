@@ -2,6 +2,31 @@
 
 # Unreleased
 
+### Verification (2026-11-16): Claude Code 2.1.326 / Pi 1.5.2
+
+- Advance the no-install fallback to `2.1.326` and add native suffix vector
+  `fc9`; installed-version discovery remains primary. No signing algorithm,
+  identity, beta gate, credential lifecycle, Pi prompt, or tool changes.
+- Seven native `claude -p` loopback captures with synthetic OAuth credentials
+  and a Sonnet 5.5 Bash continuation reproduce cch, suffix, identity,
+  model-specific betas, and Stainless headers. The continuation has
+  `cc_prev_req`; the fork does not claim full native request equivalence.
+- Live Pi plain replies pass on Sonnet 5, Opus 5, Opus 5.5, Fable 5.1,
+  Sonnet 5.5, Haiku 5.5, and Fable 5.2; Sonnet 5.5 Bash continuation and a
+  fresh-process session resume pass. All eleven final-wire requests verify
+  and return HTTP 200. A native Sonnet 5.5 live reply also passes.
+- Three paired replays of the real Pi Sonnet 5.5 request returned HTTP 200
+  for both the SDK and `cli` + Pi-prompt controls, with weekly allowed and
+  overage rejected. The negative control did not discriminate; billing
+  attribution remains inconclusive despite the headers. Extra usage was
+  disabled; rounded weekly usage remained 46% overall / 20% Fable. Concurrent
+  traffic and Console credits were not isolated or measured.
+- Checks used isolated homes and agent storage, a fresh existing access token,
+  stubbed Keychain and an explicit version override. Temporary auth was removed;
+  no token refresh was tested. Manual compaction, auxiliary requests and other
+  model tool continuations were not re-tested. Evidence: `/tmp/cc326-check/`.
+  116 tests, build, lint/format and diff checks pass.
+
 ### Changed and verified (2026-11-14): Claude Code 2.1.325 / Pi 1.5.2
 
 - Advance the no-install fallback to `2.1.325` and add the native suffix

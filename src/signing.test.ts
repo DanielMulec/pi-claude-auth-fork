@@ -288,6 +288,13 @@ test("computeVersionSuffix: native 2.1.325 sdk-cli captures", () => {
     )
 })
 
+test("computeVersionSuffix: native 2.1.326 sdk-cli captures", () => {
+    assert.equal(
+        computeVersionSuffix("Reply with exactly: OK", "2.1.326"),
+        "fc9",
+    )
+})
+
 test("stainless identity: live 2.1.314 sdk-cli", () => {
     assert.equal(CC_SDK_PACKAGE_VERSION, "0.128.0")
     assert.equal(CC_RUNTIME_VERSION, "v26.12.1")
